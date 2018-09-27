@@ -8,7 +8,7 @@ module.exports = class Entity {
         this.Properties = this.getProperties(schema.columns);
         this.inRelations = (schema.inRelations || []).map(r => new Relation(r, info));
         this.outRelations = (schema.outRelations || []).map(r => new Relation(r, info));
-
+        this.uniqueKey = schema.unique ? new UniqueKey(schema.unique, this) : undefined;
         this.disambiguateRelations(this.inRelations, 'refProp');
         this.disambiguateRelations(this.outRelations, 'prop');
     }
@@ -25,7 +25,14 @@ module.exports = class Entity {
         const properties = [];
 
         for (let key in columns) {
-            properties.push(new Property(columns[key], this.info));
+            if (this.name === 'RegAbastecimentoTanque'){
+                var a = '';
+                if (key === 'IdcAbastecimento'){
+                    var a = '';
+                }
+
+            }
+            properties.push(new Property(columns[key], this.info, this));
         }
 
         return properties;
@@ -85,8 +92,25 @@ function getSuffixIndex(array) {
     return suffixIndex;
 }
 
+class UniqueKey{
+    constructor(ukSchema, entity)
+    {
+        if(!ukSchema)
+            return;
+        this.name = ukSchema.name;
+        this.properties = [];
+        ukSchema.columns.forEach(col => {
+            if (entity.Properties){
+                var p = entity.Properties.find(p => p.columnName === col.COLUMN_NAME);
+                this.properties.push(p);
+
+            }
+        });
+    }
+}
+
 class Property {
-    constructor(columnSchema, info) {
+    constructor(columnSchema, info, entity) {
         this.columnName = columnSchema.COLUMN_NAME;
         this.info = this.getInfo(info);
         this.constantName = this.info ? this.info.constantName : null;
@@ -98,6 +122,8 @@ class Property {
         this.isNullable = columnSchema.IS_NULLABLE === 'YES';
         this.isPrimaryKey = !!columnSchema.IS_PRIMARY_KEY;
         this.order = columnSchema.ORDINAL_POSITION ? parseInt(columnSchema.ORDINAL_POSITION) : null;
+        this.entity = entity;
+        this.referedEntity = columnSchema.referedTable;
     }
 
     getPropertyName(columnName) {

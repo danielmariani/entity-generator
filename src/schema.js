@@ -40,12 +40,38 @@ module.exports = class Schema {
         INNER JOIN sys.columns col2 
             ON col2.column_id = referenced_column_id AND col2.object_id = tab2.object_id 
         `;
+
+        this.getUksQuery = `select
+        u.TABLE_NAME,
+        u.CONSTRAINT_NAME,
+        u.COLUMN_NAME
+        from INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE u
+        inner join INFORMATION_SCHEMA.TABLE_CONSTRAINTS c on u.CONSTRAINT_NAME = c.CONSTRAINT_NAME        
+        where c.CONSTRAINT_TYPE = 'UNIQUE'
+        order by TABLE_NAME, CONSTRAINT_NAME
+        `;
+
+        this.getFksQuery = `SELECT * FROM (
+            SELECT  
+                fk.name,
+                OBJECT_NAME(fk.parent_object_id) AS TABLE_NAME,
+                c1.name AS COLUMN_NAME,
+                OBJECT_NAME(fk.referenced_object_id) AS REFERED_TABLE,
+                c2.name AS REFERED_COLUMN
+            FROM  sys.foreign_keys fk
+            INNER JOIN  sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+            INNER JOIN sys.columns c1 ON fkc.parent_column_id = c1.column_id AND fkc.parent_object_id = c1.object_id
+            INNER JOIN sys.columns c2 ON fkc.referenced_column_id = c2.column_id AND fkc.referenced_object_id = c2.object_id
+            ) FKS
+            ORDER BY FKS.TABLE_NAME, COLUMN_NAME`
     }
 
     getSchemas() {
         return Promise.all([
             this.getColumns(),
-            this.getRelations()
+            this.getRelations(),
+            this.getUks(),
+            this.getFks()
         ])
             .then(this.mapRelations)
             .then(mapToArray);
@@ -60,9 +86,25 @@ module.exports = class Schema {
             .then(resultToMap);
     }
 
-    mapRelations([tables, relations]) {
+    getUks(){
+        return this.db.query(this.getUksQuery);
+    }
+
+    getFks(){
+        return this.db.query(this.getFksQuery);
+    }
+
+    mapRelations([tables, relations, uks, fks]) {
         if (!relations) return tables;
 
+        // Adiciona em cada coluna o apontamento para a tabela que a pertence.
+        for (const tbl in tables) {
+            for (const col in tables[tbl].columns){
+                tables[tbl].columns[col].TABLE = tables[tbl];
+            }
+        }
+
+        // Cria inRelations e outRelations
         relations.forEach(r => {
             if (tables[r.table]) {
                 tables[r.table].inRelations = tables[r.table].inRelations || [];
@@ -74,6 +116,32 @@ module.exports = class Schema {
                 tables[r.referenced_table].outRelations.push(r);
             }
         });
+
+        // Inicializa UKs das tabelas
+        uks.forEach(u => {
+            if (tables[u.TABLE_NAME]) {
+                tables[u.TABLE_NAME].unique = tables[u.TABLE_NAME].unique || {};
+                if (!tables[u.TABLE_NAME].unique.name){
+                    tables[u.TABLE_NAME].unique.name = u.CONSTRAINT_NAME
+                }
+                if (tables[u.TABLE_NAME].unique.name === u.CONSTRAINT_NAME){
+                    tables[u.TABLE_NAME].unique.columns = tables[u.TABLE_NAME].unique.columns || []
+                    tables[u.TABLE_NAME].unique.columns.push(tables[u.TABLE_NAME].columns[u.COLUMN_NAME])
+                }
+            }
+        });
+
+        // Inicializa FKs das colunas
+        fks.forEach(f => {
+            if (tables[f.TABLE_NAME]) {
+                if (tables[f.TABLE_NAME].columns[f.COLUMN_NAME]){
+                    tables[f.TABLE_NAME].columns[f.COLUMN_NAME].referedTable = tables[f.REFERED_TABLE]
+                }
+            }
+        });
+
+
+
         return tables;
     }
 

@@ -10,9 +10,8 @@ module.exports = function (namespace) {
     [Table("${entity.tableName}")]
     public partial class ${entity.className}
     {
-
-${entity.Properties.reduce(renderConstants, []).join('\n')}
-
+        ${entity.Properties.reduce(renderConstants, []).join('\n')}
+        
         public ${entity.className}()
         {
 ${entity.outRelations.map(renderOutRelationInit).join('\n')}
