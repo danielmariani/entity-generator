@@ -33,32 +33,33 @@ getConfig().then(config => {
     function generate(result) {
 
         return pdmInfo(config.pdmFile).then(info => {
-            
+
             // Cria entidades
             const entities = result.map(t => new Entity(t, info));
 
             // Atualiza FKs e UKs nas entidades
-            updateEntityReferences(entities);            
+            updateEntityReferences(entities);
 
             console.log('Gerando arquivo Context...');
             const retornoContext = writeFile('Context.cs', renderContext(entities));
-            
+
             // Gerando arquivos de entidade
             const retornoEntidades = entities.map(e => {
-                console.log(`Gerando arquivo ${e.className}.cs`);
+                //console.log(`Gerando arquivo ${e.className}.cs`);
                 return writeFile(`${entitiesFolder || '.'}/${e.className}.cs`, render(e));
             });
 
             //Gerando arquivos de Interface
-             const retornoImpExp = entities.map(e => {
-                 console.log(`Gerando arquivo Interface${e.className}.cs`);
-                return writeFile(`${impExpFolder || '.'}/Interface${e.className}.cs`,renderInterface(e));
-             });
+            const retornoImpExp = entities.map(e => {
+                //console.log(`Gerando arquivo Interface${e.className}.cs`);
+                return writeFile(`${impExpFolder || '.'}/Interface${e.className}.cs`, renderInterface(e));
+            });
 
             console.log('Reescrevendo project file');
             const retornoProj = csprojLoader(config.projectFile, entities, config.entitiesFolder);
 
             return Promise.all([
+                retornoImpExp,
                 retornoProj,
                 retornoContext,
                 ...retornoEntidades
@@ -66,8 +67,7 @@ getConfig().then(config => {
         });
 
     }
-    function updateEntityReferences(entities)
-    {
+    function updateEntityReferences(entities) {
         // Cria FKs nas entidades
         entities.forEach(entity => {
             // // Add Unique key reference
@@ -81,11 +81,11 @@ getConfig().then(config => {
 
             // Add Foreigh Key reference
             entity.Properties
-            .filter(prop => prop.referedEntity)
-            .forEach(prop => {
-                var referedEntity = entities.find(e => e.tableName === prop.referedEntity.tableName);
-                prop.referedEntity = referedEntity;
-            });
+                .filter(prop => prop.referedEntity)
+                .forEach(prop => {
+                    var referedEntity = entities.find(e => e.tableName === prop.referedEntity.tableName);
+                    prop.referedEntity = referedEntity;
+                });
         });
     }
 

@@ -70,5 +70,11 @@ module.exports = {
         "nullability": "annotation",
         "lengthInfo": "StringLength",
         "typeName": ""
+    },
+    "nvarchar": {
+        "csharpType": "string",
+        "nullability": "annotation",
+        "lengthInfo": "StringLength",
+        "typeName": ""
     }
 }

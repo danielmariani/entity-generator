@@ -2,64 +2,31 @@
 
 module.exports = function (namespace) {
     return function (entity, schema) {
-        return `namespace ${namespace}
+        return `namespace ${namespace}.Interfaces
 {
     using System;
+    using System.Linq;
     using System.Collections.Generic;
     using System.ComponentModel.DataAnnotations;
     using System.ComponentModel.DataAnnotations.Schema;
 
-    [Table("${entity.tableName}")]
     public partial class Interface${entity.className} : InterfaceDataAccess<${entity.className}, Interface${entity.className}.Filtros>
     {
-        public Interface${entity.className}()
-        {
-        }
-
-        public Interface${entity.className}(Context db) : base(db)
-        {
-        }
-
-        public override ${entity.className} Create(${entity.className} entidade)
-        {
-            db.${entity.className}.Add(entidade);
-            db.SaveChanges();
-            return entidade;
-        }
-        
-        public override IEnumerable<${entity.className}> Retrieve(Filtros filtros)
-        {            
-            var retorno = db.${entity.className}.ToList();
-            return retorno;
-        }
-        
-        public override ${entity.className} Update(${entity.className} entidade)
-        {
-            db.${entity.className}.Attach(entidade);
-            db.Entry(entidade).State = System.Data.Entity.EntityState.Modified;
-            db.SaveChanges();
-            return entidade;
-        }
-        
-        public override ${entity.className} Delete(int id)
-        {
-            ${entity.className} entidade = db.${entity.className}.Find(id);
-            db.${entity.className}.Remove(entidade);
-            db.SaveChanges();
-            return entidade;
-        }
-        
         public object Export()
         {
             return db.${entity.className}
                 .Select(
                 reg => new
-                {${entity.Properties.map(renderPropertyInExport).join('\n')}
+                {
+${entity.Properties.map(renderPropertyInExport)
+                .filter(line => line)
+                .join('\n')}
                 }).ToList();
         }
-        
-        public class Filtros : FiltrosParent
+
+        public partial class Filtros : FiltrosParent
         {
+
         }
     }
 }`;
@@ -67,37 +34,34 @@ module.exports = function (namespace) {
 }
 
 function renderPropertyInExport(prop) {
-    var str = '';
 
-    if (prop.isPrimaryKey){
+
+    if (prop.isPrimaryKey) {
         return '';
     }
 
-    if (!prop.referedEntity){
-        return `reg.${prop.propertyName},`;
+    if (!prop.referedEntity) {
+        return `\t\t\t\t\treg.${prop.propertyName},`;
     }
 
-    if (!prop.referedEntity.uniqueKey){
-        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
-        return `// reg.${prop.propertyName},`;
+    if (!prop.referedEntity.uniqueKey) {
+        // console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        return `\t\t\t\t\t// reg.${prop.propertyName},`;
     }
 
     // Percorre as chaves da tabela referenciada.
     return prop.referedEntity.uniqueKey.properties.map(refProp => {
-        `reg.${prop.propertyName}.${refProp.propertyName},`
-    }).join('\n');
+        if (refProp.referedEntity) {
+            // return `\t\t\t\t\treg.${prop.referedEntity.className}.${refProp.referedEntity.className},`
+            return '';
+        }
 
-    // return [
-    //     `${prop.isPrimaryKey ? '' : `reg.${prop.propertyName},`}`
+        if (prop.isNullable) {
+            return `\t\t\t\t\t${refProp.propertyName} = reg.${prop.propertyName} != null ? reg.${prop.referedEntity.className}.${refProp.propertyName} : null,`;
+        }
 
-    //     // `${c.isIdentity ? '[DatabaseGenerated(DatabaseGeneratedOption.Identity)]' : `${c.isPrimaryKey ? '[DatabaseGenerated(DatabaseGeneratedOption.None)]' : ''}`}`,
-    //     // `${!c.isNullable && c.type.nullability === 'annotation' ? '[Required]' : ''}`,
-    //     // `${c.type.lengthInfo && c.size > 0 ? `[${c.type.lengthInfo}(${c.size})]` : ''}`,
-    //     // `[Column("${c.columnName}"${c.type.typeName ? `, TypeName = "${c.type.typeName}"` : ''}${c.order ? `, Order = ${c.order - 1}` : ''})]`,
-    //     // `public ${c.type.csharpType}${c.isNullable && c.type.nullability === 'questionMark' ? '?' : ''} ${c.propertyName} { get; set; }`
-    // ].filter(line => line)
-    //     .map(line => '\t\t\t' + line)
-    //     .join('\n');
+        return `\t\t\t\t\treg.${prop.referedEntity.className}.${refProp.propertyName},`;
+    }).filter(line => line).join('\n');
 }
 
 function renderConstants(constants, property) {
