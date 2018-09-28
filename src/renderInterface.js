@@ -50,7 +50,7 @@ function renderPropertyInExport(prop, preffix = "", suffix = "") {
     // Percorre as chaves da tabela referenciada.
     return prop.referedEntity.uniqueKey.properties.map(refProp => {
         if (refProp.referedEntity) {
-            return renderPropertyInExport(refProp, (preffix ? `${preffix}.` : "") + refProp.entity.className, (prop.suffix || suffix));
+            return renderPropertyInExport(refProp, (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), (prop.suffix || suffix));
         }
 
         return generateUkProperty(preffix, prop, refProp, suffix);
