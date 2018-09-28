@@ -25,13 +25,6 @@ module.exports = class Entity {
         const properties = [];
 
         for (let key in columns) {
-            if (this.name === 'RegAbastecimentoTanque'){
-                var a = '';
-                if (key === 'IdcAbastecimento'){
-                    var a = '';
-                }
-
-            }
             properties.push(new Property(columns[key], this.info, this));
         }
 
@@ -49,10 +42,22 @@ module.exports = class Entity {
                 .filter(r => r[prop] === key);
 
             const suffixIndex = getSuffixIndex(ambiguousRelations.map(r => r.column));
+            const entity = this;
 
             ambiguousRelations.forEach(relation => {
                 const suffix = relation.column.substring(suffixIndex);
                 relation[prop] += suffix;
+
+                let propertyName;
+                if (entity.className === relation.class) {
+                    propertyName = relation.column;
+                } else if (entity.className === relation.refClass) {
+                    propertyName = relation.refColumn;
+                }
+
+                const collumn = entity.Properties.find(p => p.propertyName === propertyName);
+                if (!collumn) return;
+                collumn.suffix = suffix;
             });
         }
     }
@@ -92,15 +97,14 @@ function getSuffixIndex(array) {
     return suffixIndex;
 }
 
-class UniqueKey{
-    constructor(ukSchema, entity)
-    {
-        if(!ukSchema)
+class UniqueKey {
+    constructor(ukSchema, entity) {
+        if (!ukSchema)
             return;
         this.name = ukSchema.name;
         this.properties = [];
         ukSchema.columns.forEach(col => {
-            if (entity.Properties){
+            if (entity.Properties) {
                 var p = entity.Properties.find(p => p.columnName === col.COLUMN_NAME);
                 this.properties.push(p);
 

@@ -46,7 +46,7 @@ function renderPropertyInExport(prop) {
 
     if (!prop.referedEntity.uniqueKey) {
         // console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
-        return `\t\t\t\t\t// reg.${prop.propertyName},`;
+        return `\t\t\t\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
     }
 
     // Percorre as chaves da tabela referenciada.
@@ -57,10 +57,15 @@ function renderPropertyInExport(prop) {
         }
 
         if (prop.isNullable) {
-            return `\t\t\t\t\t${refProp.propertyName} = reg.${prop.propertyName} != null ? reg.${prop.referedEntity.className}.${refProp.propertyName} : null,`;
+            if (refProp.type.nullability === "questionMark") {
+                return `\t\t\t\t\t${prop.referedEntity.className}_${refProp.propertyName + (prop.suffix || '')} = (${refProp.type.csharpType}?) reg.${prop.referedEntity.className + (prop.suffix || '')}.${refProp.propertyName},`;
+            } else {
+                return `\t\t\t\t\t${prop.referedEntity.className}_${refProp.propertyName + (prop.suffix || '')} = reg.${prop.referedEntity.className + (prop.suffix || '')}.${refProp.propertyName},`;
+                // return `\t\t\t\t\t${refProp.propertyName} = reg.${prop.propertyName} != null ? reg.${prop.referedEntity.className}.${refProp.propertyName} : null,`;
+            }
         }
 
-        return `\t\t\t\t\treg.${prop.referedEntity.className}.${refProp.propertyName},`;
+        return `\t\t\t\t\t${prop.referedEntity.className}_${refProp.propertyName + (prop.suffix || '')} = reg.${prop.referedEntity.className + (prop.suffix || '')}.${refProp.propertyName},`;
     }).filter(line => line).join('\n');
 }
 
