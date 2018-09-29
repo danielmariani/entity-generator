@@ -12,6 +12,16 @@ module.exports = function (namespace) {
 
     public partial class Interface${entity.className} : InterfaceDataAccess<${entity.className}, Interface${entity.className}.Filtros>
     {
+        public Interface${entity.className}()
+        {
+            base.DbSet = db.${entity.className};
+        }
+
+        public Interface${entity.className}(Context db) : base(db)
+        {
+            base.DbSet = db.${entity.className};
+        }
+
         public object Export()
         {
             return db.${entity.className}
@@ -80,7 +90,9 @@ function renderUkObjDeclaration(prop, preffix = "") {
             .join("\n");
     }
 
-    return `\t\t\t${prop.type.csharpType} ${prop.propertyName} = entity${preffix}.${prop.propertyName};`;
+    const nullIndicator = prop.isNullable && prop.type.nullability === "questionMark" ? "?" : "";
+
+    return `\t\t\t${prop.type.csharpType}${nullIndicator} ${prop.propertyName} = entity${preffix}.${prop.propertyName};`;
 }
 
 function renderPropertyInImport(prop) {
