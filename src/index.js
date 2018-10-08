@@ -1,5 +1,5 @@
 #! /usr/bin/env node
-process.chdir('../PostoFacil.DataAcces');
+process.chdir('../../PostoFacil.DataAcces');
 const util = require('util');
 const fs = require('fs');
 const pdmInfo = require('pdm-to-json');
@@ -50,7 +50,10 @@ getConfig().then(config => {
             });
 
             //Gerando arquivos de Interface
-            const retornoImpExp = entities.map(e => {
+            const tablesToImport = getTablesToImport();
+            const retornoImpExp = entities.filter(e => tablesToImport
+                .find(tb => tb === e.tableName))
+            .map(e => {
                 //console.log(`Gerando arquivo Interface${e.className}.cs`);
                 return writeFile(`${impExpFolder || '.'}/Interface${e.className}.cs`, renderInterface(e));
             });
@@ -67,17 +70,10 @@ getConfig().then(config => {
         });
 
     }
+
     function updateEntityReferences(entities) {
         // Cria FKs nas entidades
         entities.forEach(entity => {
-            // // Add Unique key reference
-            // if (entity.uniqueKey){
-            //     entity.uniqueKey.columns = entity.uniqueKey.columns.map(col => {
-            //         var referedTable = entities.find(e => e.tableName === col.TABLE_NAME);
-            //         var referedColumn = referedTable.Properties.find(p => p.columnName === col.COLUMN_NAME);
-            //         return referedColumn;
-            //     });
-            // }
 
             // Add Foreigh Key reference
             entity.Properties
@@ -87,6 +83,65 @@ getConfig().then(config => {
                     prop.referedEntity = referedEntity;
                 });
         });
+    }
+
+    
+    function getTablesToImport(){
+        // var a = [];
+        // a.push('REG_TURNO');
+        // a.push('REG_TURNO_BLOCO_MEDIDOR');
+
+        // return a;
+
+        return [
+            'REG_TURNO',
+            'REG_TURNO_BLOCO_MEDIDOR',
+            'REG_TURNO_TANQUE_POSTO',
+            'REG_TURNO_FECHAMENTO',
+            'REG_RATEIO',
+            'REL_RATEIO_CENTRO_CUSTO',
+            'REG_CARGA_MASSA',
+            'REG_ABASTECIMENTO',
+            'REG_ABASTECIMENTO_TANQUE',
+            'REG_REC_CAMINHAO_TANQUE',
+            'REG_REC_CHEGADA_EXTERNA_CAMINHAO_TANQUE',
+            'REG_REC_COMPARTIMENTO_CAMINHAO_TANQUE',
+            'REG_REC_COMPLEMENTO_CAMINHAO_TANQUE',
+            'REG_REC_AMOSTRAGEM_CAMINHAO_TANQUE',
+            'REG_REC_BLOCO_MEDIDOR_CAMINHAO_TANQUE',
+            'REG_REC_TANQUE_POSTO_CAMINHAO_TANQUE',
+            'REG_MOVIMENTACAO_POSTO_MOVEL',
+            'REG_BLOCO_MEDIDOR_TROCA',
+            'REG_BLOCO_MEDIDOR_RESET',
+            'REG_BLOCO_MEDIDOR_AFERICAO',
+            'REG_BLOQUEIO_BLOCO_MEDIDOR',
+            'HST_TURNO',
+            'HST_TURNO_BLOCO_MEDIDOR',
+            'HST_TURNO_TANQUE_POSTO',
+            'HST_ABASTECIMENTO',
+            'HST_ABASTECIMENTO_TANQUE',
+            // 'HST_REC_CAMINHAO_TANQUE',
+            // 'HST_REC_CHEGADA_EXTERNA_CAMINHAO_TANQUE',
+            // 'HST_REC_COMPARTIMENTO_CAMINHAO_TANQUE',
+            // 'HST_REC_COMPLEMENTO_CAMINHAO_TANQUE',
+            // 'HST_REC_AMOSTRAGEM_CAMINHAO_TANQUE',
+            // 'HST_REC_BLOCO_MEDIDOR_CAMINHAO_TANQUE',
+            // 'HST_REC_TANQUE_POSTO_CAMINHAO_TANQUE',
+            'HST_MOVIMENTACAO_POSTO_MOVEL',
+            'HST_BLOCO_MEDIDOR_AFERICAO',
+            'HST_EQUIPAMENTO',
+            'HST_TANQUE_EQUIPAMENTO',
+            'HST_REL_TANQUE_EQUIPAMENTO_PRODUTO',
+            'HST_POSTO',
+            'HST_TANQUE_POSTO',
+            'HST_BLOCO_MEDIDOR',
+            'HST_REL_TANQUE_BLOCO_MEDIDOR',
+            'HST_USUARIO',
+            'CTR_ENVIO_ERP',
+            // 'CTR_ENCERRANTE',
+            'CTR_HOR_HOD',
+            'REG_ANOMALIA'
+        ];
     }
 
 }).catch(console.log);

@@ -83,18 +83,6 @@ ${entity.Properties.map(prop => renderPropertyInImport(prop))
     }
 }
 
-function renderUkObjDeclaration(prop, preffix = "") {
-    if (prop.referedEntity && prop.referedEntity.uniqueKey) {
-        return prop.referedEntity.uniqueKey.properties.map(refProp => renderUkObjDeclaration(refProp, `${preffix}.${refProp.entity.className}`))
-            .filter(line => line)
-            .join("\n");
-    }
-
-    const nullIndicator = prop.isNullable && prop.type.nullability === "questionMark" ? "?" : "";
-
-    return `\t\t\t${prop.type.csharpType}${nullIndicator} ${prop.propertyName} = entity${preffix}.${prop.propertyName};`;
-}
-
 function renderPropertyInImport(prop) {
     if (prop.referedEntity) {
         return `\t\t\tentity.${prop.referedEntity.className + (prop.suffix || "")} = (new Interface${prop.referedEntity.className}(db)).GetByUnique(GenDic(dic, new HashSet<string>() { ${renderRecursiveProperties(prop, "", (prop.suffix || ""))} }));`;
@@ -122,38 +110,51 @@ function renderRecursiveProperties(prop, preffix = "", suffix = "") {
     return `"${preffix}${prop.propertyName}${suffix}"`;
 }
 
-function renderUkObjWhere(prop, preffix = "") {
+function renderUkObjDeclaration(prop, preffix = "", propOwner = '') {
     if (prop.referedEntity && prop.referedEntity.uniqueKey) {
-        return prop.referedEntity.uniqueKey.properties.map(refProp => renderUkObjWhere(refProp, `${preffix}.${refProp.entity.className}`))
+        return prop.referedEntity.uniqueKey.properties.map(refProp => renderUkObjDeclaration(refProp, `${preffix}.${refProp.entity.className}${(prop.suffix||'')}`,`${propOwner}${prop.referedEntity.className}_`))
             .filter(line => line)
             .join("\n");
     }
 
-    return `\t\t\t\t.Where(item => item${preffix}.${prop.propertyName} == ${prop.propertyName})`;
+    const nullIndicator = prop.isNullable && prop.type.nullability === "questionMark" ? "?" : "";
+
+    return `\t\t\t${prop.type.csharpType}${nullIndicator} ${propOwner}${prop.propertyName} = entity${preffix}.${prop.propertyName}${(prop.suffix||'')};`;
 }
 
-function renderUkDicWhere(prop, preffix = "") {
+function renderUkObjWhere(prop, preffix = "",propOwner = '') {
     if (prop.referedEntity && prop.referedEntity.uniqueKey) {
-        return prop.referedEntity.uniqueKey.properties.map(refProp => renderUkDicWhere(refProp, `${preffix}.${refProp.entity.className}`))
+        return prop.referedEntity.uniqueKey.properties.map(refProp => renderUkObjWhere(refProp, `${preffix}.${refProp.entity.className}${(prop.suffix||'')}`,`${propOwner}${prop.referedEntity.className}_`))
             .filter(line => line)
             .join("\n");
     }
 
-    return `\t\t\t\t.Where(item => item${preffix}.${prop.propertyName} == ${prop.propertyName})`;
+    return `\t\t\t\t.Where(item => item${preffix}.${prop.propertyName}${(prop.suffix||'')} == ${propOwner}${prop.propertyName})`;
 }
 
-function renderUkDicDeclaration(prop) {
+function renderUkDicDeclaration(prop, propOwner = '') {
 
     if (prop.referedEntity && prop.referedEntity.uniqueKey) {
-        return prop.referedEntity.uniqueKey.properties.map(renderUkDicDeclaration)
+        return prop.referedEntity.uniqueKey.properties.map(p => renderUkDicDeclaration(p,`${propOwner}${prop.referedEntity.className}_`))
             .filter(line => line)
             .join("\n");
     }
 
-    return `\t\t\t${prop.type.csharpType} ${prop.propertyName} = (${prop.type.csharpType})dic.Where(keyValue => keyValue.Key.Contains("${prop.entity.className}") && keyValue.Key.Contains("${prop.propertyName}") && keyValue.Key.Contains(sufixo)).FirstOrDefault().Value;`;
+    return `\t\t\t${prop.type.csharpType} ${propOwner}${prop.propertyName} = (${prop.type.csharpType})dic.Where(keyValue => keyValue.Key.Contains("${prop.entity.className}") && keyValue.Key.Contains("${prop.propertyName}") && keyValue.Key.Contains(sufixo)).FirstOrDefault().Value;`;
 }
 
-function renderPropertyInExport(prop, preffix = "", suffix = "") {
+function renderUkDicWhere(prop, preffix = "",propOwner = '') {
+    if (prop.referedEntity && prop.referedEntity.uniqueKey) {
+        return prop.referedEntity.uniqueKey.properties.map(refProp => renderUkDicWhere(refProp, `${preffix}.${refProp.entity.className}${(prop.suffix||'')}`,`${propOwner}${prop.referedEntity.className}_`))
+            .filter(line => line)
+            .join("\n");
+    }
+
+    return `\t\t\t\t.Where(item => item${preffix}.${prop.propertyName}${(prop.suffix||'')} == ${propOwner}${prop.propertyName})`;
+}
+
+
+function renderPropertyInExport(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
     if (prop.isPrimaryKey) {
         return '';
     }
@@ -163,27 +164,27 @@ function renderPropertyInExport(prop, preffix = "", suffix = "") {
     }
 
     if (!prop.referedEntity.uniqueKey) {
-        // console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         return `\t\t\t\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
     }
 
     // Percorre as chaves da tabela referenciada.
     return prop.referedEntity.uniqueKey.properties.map(refProp => {
         if (refProp.referedEntity) {
-            return renderPropertyInExport(refProp, (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), (prop.suffix || suffix));
+            return renderPropertyInExport(refProp, (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), (prop.suffix || suffix), (atLeastOnePropNullable || prop.isNullable));
         }
 
-        return generateUkProperty(preffix, prop, refProp, suffix);
+        return generateUkProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable);
     }).filter(line => line).join('\n');
 }
 
-function generateUkProperty(preffix, prop, refProp, suffix) {
+function generateUkProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable) {
     let ret = "";
     ret += "\t\t\t\t\t";
     ret += preffix ? `${preffix.replace(/\./g, "_")}_` : "";
     ret += prop.referedEntity.className + "_";
     ret += refProp.propertyName + (prop.suffix || '') + suffix + " = ";
-    ret += prop.isNullable && refProp.type.nullability === "questionMark" ? `(${refProp.type.csharpType}?) ` : "";
+    ret += (prop.isNullable || atLeastOnePropNullable) && refProp.type.nullability === "questionMark" ? `(${refProp.type.csharpType}?) ` : "";
     ret += `reg.${preffix ? `${preffix}.` : ""}`;
     ret += prop.referedEntity.className + (prop.suffix || '') + ".";
     ret += refProp.propertyName + ",";
