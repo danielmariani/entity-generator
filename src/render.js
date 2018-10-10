@@ -9,7 +9,9 @@ module.exports = function (namespace) {
 
     [Table("${entity.tableName}")]
     public partial class ${entity.className}
-    {
+    {        
+        public const string TABLE_NAME = "${entity.tableName}";
+
 ${entity.Properties.reduce(renderConstants, []).join('\n')}
         
         public ${entity.className}()

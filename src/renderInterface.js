@@ -22,8 +22,41 @@ module.exports = function (namespace) {
             base.DbSet = db.${entity.className};
         }
 
+        private static List<${entity.className}> listaImport;
+
+        public static List<${entity.className}> ListaImport
+        {
+            get
+            {
+                return Interface${entity.className}.listaImport;
+            }
+        }
+        public static void InicializaLista(Context db)
+        {
+            if (Interface${entity.className}.listaImport == null)
+            {
+                Interface${entity.className}.listaImport = db.${entity.className}
+${(entity.uniqueKey && entity.uniqueKey.properties.filter(prop => prop.referedEntity).map(prop => renderIncludesInitializingList(prop))
+    .filter(line => line)
+    .join('\n') || '')}
+                .ToList();
+            }
+        }
+
+        public override void AtualizaLista(Context db)
+        {
+            Interface${entity.className}.listaImport = db.${entity.className}
+${(entity.uniqueKey && entity.uniqueKey.properties.filter(prop => prop.referedEntity).map(prop => renderIncludesInitializingList(prop))
+    .filter(line => line)
+    .join('\n') || '')}
+                .ToList();
+        }
+
+
         public object Export()
         {
+            db.Database.CommandTimeout = TIMEOUT_EXPORT;
+            
             return db.${entity.className}
                 .Select(
                 reg => new
@@ -44,8 +77,9 @@ ${entity.Properties.map(prop => renderPropertyInExport(prop))
 ${((entity.uniqueKey || {}).properties || []).map(prop => renderUkDicDeclaration(prop))
                 .filter(line => line)
                 .join('\n')}
-
-            return db.${entity.className}
+            
+            InicializaLista(db);
+            return ListaImport
 ${((entity.uniqueKey || {}).properties || []).map(prop => renderUkDicWhere(prop))
                 .filter(line => line)
                 .join('\n')}
@@ -58,7 +92,8 @@ ${((entity.uniqueKey || {}).properties || []).map(prop => renderUkObjDeclaration
                 .filter(line => line)
                 .join('\n')}
 
-            return db.${entity.className}
+            InicializaLista(db);
+            return ListaImport
 ${((entity.uniqueKey || {}).properties || []).map(prop => renderUkObjWhere(prop))
                 .filter(line => line)
                 .join('\n')}
@@ -83,7 +118,40 @@ ${entity.Properties.map(prop => renderPropertyInImport(prop))
     }
 }
 
+function renderIncludesInitializingList(prop, preffix = "") {
+    if (prop.isPrimaryKey) {
+        return '';
+    }
+
+    if (prop.referedEntity){
+        preffix = preffix + prop.referedEntity.className + (prop.suffix || '');
+        if (prop.referedEntity.uniqueKey){
+            if (prop.referedEntity.uniqueKey.properties.filter(propIn => propIn.referedEntity).length > 0){
+                  return prop.referedEntity.uniqueKey.properties
+                    .map(propIn => {
+                        if (propIn.referedEntity){
+                            return renderIncludesInitializingList(propIn,`${preffix}.`)
+                        }
+                        else{
+                            return `\t\t\t\t.Include("${(preffix || '')}")`;
+                        }
+                    })
+                    .filter(line => line)
+                    .join("\n");
+            }
+        }
+        return `\t\t\t\t.Include("${(preffix || '')}")`;
+
+    }
+
+    return '';
+}
+
 function renderPropertyInImport(prop) {
+    if (prop.isPrimaryKey) {
+        return '';
+    }
+    
     if (prop.referedEntity) {
         return `\t\t\tentity.${prop.referedEntity.className + (prop.suffix || "")} = (new Interface${prop.referedEntity.className}(db)).GetByUnique(GenDic(dic, new HashSet<string>() { ${renderRecursiveProperties(prop, "", (prop.suffix || ""))} }));`;
     }

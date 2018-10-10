@@ -51,8 +51,17 @@ getConfig().then(config => {
 
             //Gerando arquivos de Interface
             const tablesToImport = getTablesToImport();
-            const retornoImpExp = entities.filter(e => tablesToImport
-                .find(tb => tb === e.tableName))
+            const tablesToNotImport = getTablesToNotImport();
+            const retornoImpExp = entities
+
+            // // Apenas as tabelas:
+            // .filter(e => tablesToImport
+            // .find(tb => tb === e.tableName))
+
+            // // Exceto as tabelas:
+            // .filter(e => tablesToNotImport
+            // .find(tb => tb !== e.tableName))
+
             .map(e => {
                 //console.log(`Gerando arquivo Interface${e.className}.cs`);
                 return writeFile(`${impExpFolder || '.'}/Interface${e.className}.cs`, renderInterface(e));
@@ -84,7 +93,15 @@ getConfig().then(config => {
                 });
         });
     }
-
+    function getTablesToNotImport(){
+        return [
+            'CTR_ENCERRANTE',
+            'REG_ANOMALIA',
+            'EVT_BASE',
+            'CAD_IMAGEM',
+            'CAD_TURNO'
+        ];
+    }
     
     function getTablesToImport(){
         // var a = [];
@@ -105,7 +122,7 @@ getConfig().then(config => {
             'REG_ABASTECIMENTO_TANQUE',
             'REG_REC_CAMINHAO_TANQUE',
             'REG_REC_CHEGADA_EXTERNA_CAMINHAO_TANQUE',
-            'REG_REC_COMPARTIMENTO_CAMINHAO_TANQUE',
+            // 'REG_REC_COMPARTIMENTO_CAMINHAO_TANQUE',
             'REG_REC_COMPLEMENTO_CAMINHAO_TANQUE',
             'REG_REC_AMOSTRAGEM_CAMINHAO_TANQUE',
             'REG_REC_BLOCO_MEDIDOR_CAMINHAO_TANQUE',
@@ -140,7 +157,7 @@ getConfig().then(config => {
             'CTR_ENVIO_ERP',
             // 'CTR_ENCERRANTE',
             'CTR_HOR_HOD',
-            'REG_ANOMALIA'
+            // 'REG_ANOMALIA'
         ];
     }
 
