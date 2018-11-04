@@ -2,7 +2,17 @@
 
 module.exports = function (namespace) {
     return function (entity, schema) {
-        return `namespace ${namespace}.Interfaces
+        return `/*
+=============================================================================
+    ATENTION!
+
+    This file has been automatically generated.
+    Any manual alteration to this file will be lost on the next generation.
+    To customize this class use a partial class.
+=============================================================================
+ */        
+
+namespace ${namespace}.Interfaces
 {
     using System;
     using System.Linq;
