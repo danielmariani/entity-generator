@@ -1,5 +1,5 @@
 #! /usr/bin/env node
-process.chdir('../../PostoFacil.DataAcces');
+process.chdir('../PostoFacil.DataAcces');
 const util = require('util');
 const fs = require('fs');
 const pdmInfo = require('pdm-to-json');
@@ -54,18 +54,18 @@ getConfig().then(config => {
             const tablesToNotImport = getTablesToNotImport();
             const retornoImpExp = entities
 
-            // // Apenas as tabelas:
-            // .filter(e => tablesToImport
-            // .find(tb => tb === e.tableName))
+                // // Apenas as tabelas:
+                // .filter(e => tablesToImport
+                // .find(tb => tb === e.tableName))
 
-            // // Exceto as tabelas:
-            // .filter(e => tablesToNotImport
-            // .find(tb => tb !== e.tableName))
+                // // Exceto as tabelas:
+                // .filter(e => tablesToNotImport
+                // .find(tb => tb !== e.tableName))
 
-            .map(e => {
-                //console.log(`Gerando arquivo Interface${e.className}.cs`);
-                return writeFile(`${impExpFolder || '.'}/Interface${e.className}.cs`, renderInterface(e));
-            });
+                .map(e => {
+                    //console.log(`Gerando arquivo Interface${e.className}.cs`);
+                    return writeFile(`${impExpFolder || '.'}/Interface${e.className}.cs`, renderInterface(e));
+                });
 
             console.log('Reescrevendo project file');
             const retornoProj = csprojLoader(config.projectFile, entities, config.entitiesFolder);
@@ -93,7 +93,7 @@ getConfig().then(config => {
                 });
         });
     }
-    function getTablesToNotImport(){
+    function getTablesToNotImport() {
         return [
             'CTR_ENCERRANTE',
             'REG_ANOMALIA',
@@ -102,8 +102,8 @@ getConfig().then(config => {
             'CAD_TURNO'
         ];
     }
-    
-    function getTablesToImport(){
+
+    function getTablesToImport() {
         // var a = [];
         // a.push('REG_TURNO');
         // a.push('REG_TURNO_BLOCO_MEDIDOR');
