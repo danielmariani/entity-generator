@@ -20,6 +20,8 @@ namespace ${namespace}.Interfaces
     using System.ComponentModel.DataAnnotations;
     using System.ComponentModel.DataAnnotations.Schema;
     using System.Text;
+    using IHM.Data.DbProviderFactory;
+    using System.Data;
 
     public partial class Interface${entity.className} : InterfaceDataAccess<${entity.className}, Interface${entity.className}.Filtros>
     {
@@ -91,6 +93,58 @@ ${entity.Properties.map(prop => renderPropertyInImport(prop))
         {
 
         }
+
+        public void Import(string[] values)
+        {
+            IProviderFactory pf = ProviderFactories.GetFactory(base.ConnectionString);
+            using (IDbConnection conn = pf.CreateConnection(base.ConnectionString))
+            {
+                conn.Open();
+                StringBuilder sql = new StringBuilder();
+                sql.Append("insert into ${entity.tableName} (");
+${entity.Properties.map(generateAppendcolum).filter(line => line).join("\n").replace(/,"\);$/, '");')}
+                sql.Append(" ) values (");
+                sql.AppendFormat(" {0},", InterfaceCadPosto.GetIdcSelect(
+                    "@CadPosto_CadUnidade_CadComplexo_CadDiretoria_SglDiretoria", 
+                    "@CadPosto_CadUnidade_CadComplexo_SglComplexo", 
+                    "@CadPosto_CadUnidade_SglUnidade", 
+                    "@CadPosto_SglPosto"));
+                sql.AppendFormat(" {0},", InterfaceCadTurno.GetIdcSelect(
+                    "@CadTurno_SglTurno",
+                    "@CadTurno_DscTurno",
+                    "@CadTurno_HorInicio",
+                    "@CadTurno_HorFinal"));
+                sql.AppendFormat(" {0},", InterfaceCadUsuario.GetIdcSelect(
+                    "@CadUsuario_CodUsuarioAbertura"));
+                sql.AppendFormat(" {0},", InterfaceCadUsuario.GetIdcSelect(
+                    "@CadUsuario_CodUsuarioFechamento"));
+${entity.Properties.map(genereteAppendValue).filter(line => line).join("\n").replace(/,"\);$/, '");')}                    
+                sql.AppendFormat(" {0},", InterfaceCadUsuario.GetIdcSelect(
+                    "@CadUsuario_CodUsuarioValidacao"));
+                sql.Append(" );");
+                IDbCommand cmd = pf.CreateCommand(sql.ToString(), conn);
+                cmd.CommandTimeout = TIMEOUT_IMPORT;
+                cmd.Parameters.Add(pf.CreateParameter("@CadPosto_CadUnidade_CadComplexo_CadDiretoria_SglDiretoria", values[0], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadPosto_CadUnidade_CadComplexo_SglComplexo", values[1], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadPosto_CadUnidade_SglUnidade", values[2], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadPosto_SglPosto", values[3], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadTurno_DscTurno", values[4], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadTurno_HorFinal", values[5], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadTurno_HorInicio", values[6], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadTurno_SglTurno", values[7], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadUsuario_CodUsuarioAbertura", values[8], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@CadUsuario_CodUsuarioFechamento", values[9], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@SGL_TURNO", values[10], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@DTH_INICIAL", values[11], DbType.DateTime));
+                cmd.Parameters.Add(pf.CreateParameter("@DTH_FINAL", values[12], DbType.DateTime));
+                cmd.Parameters.Add(pf.CreateParameter("@STU_TURNO", values[13], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@NOM_DISPOSITIVO", values[14], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@DTH_CRIACAO_REG", values[15], DbType.DateTime));
+                cmd.Parameters.Add(pf.CreateParameter("@CadUsuario_CodUsuarioValidacao", values[16], DbType.String));
+                cmd.Parameters.Add(pf.CreateParameter("@DTH_VALIDACAO", string.IsNullOrWhiteSpace(values[17]) ? DBNull.Value : (object)values[17], DbType.DateTime));
+                cmd.ExecuteNonQuery();
+            }
+        }
     }
 
     public class ${entity.className}Export : CSVExportable
@@ -121,6 +175,20 @@ ${entity.Properties.map(prop => renderPropertyInToString(prop))
     }
 }`;
     }
+}
+
+function genereteAppendValue(prop) {
+    if (prop.isPrimaryKey) return;
+
+    if (prop.referedEntity) return;
+
+    return `\t\t\t\tsql.Append(" @${prop.columnName},");`
+}
+
+function generateAppendcolum(prop) {
+    if (prop.isPrimaryKey) return;
+
+    return `\t\t\t\tsql.Append(" ${prop.columnName},");`;
 }
 
 function renderPropertyInImport(prop) {
