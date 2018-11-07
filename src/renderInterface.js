@@ -104,23 +104,7 @@ ${entity.Properties.map(prop => renderPropertyInImport(prop))
                 sql.Append("insert into ${entity.tableName} (");
 ${entity.Properties.map(generateAppendcolum).filter(line => line).join("\n").replace(/,"\);$/, '");')}
                 sql.Append(" ) values (");
-                sql.AppendFormat(" {0},", InterfaceCadPosto.GetIdcSelect(
-                    "@CadPosto_CadUnidade_CadComplexo_CadDiretoria_SglDiretoria", 
-                    "@CadPosto_CadUnidade_CadComplexo_SglComplexo", 
-                    "@CadPosto_CadUnidade_SglUnidade", 
-                    "@CadPosto_SglPosto"));
-                sql.AppendFormat(" {0},", InterfaceCadTurno.GetIdcSelect(
-                    "@CadTurno_SglTurno",
-                    "@CadTurno_DscTurno",
-                    "@CadTurno_HorInicio",
-                    "@CadTurno_HorFinal"));
-                sql.AppendFormat(" {0},", InterfaceCadUsuario.GetIdcSelect(
-                    "@CadUsuario_CodUsuarioAbertura"));
-                sql.AppendFormat(" {0},", InterfaceCadUsuario.GetIdcSelect(
-                    "@CadUsuario_CodUsuarioFechamento"));
 ${entity.Properties.map(genereteAppendValue).filter(line => line).join("\n").replace(/,"\);$/, '");')}                    
-                sql.AppendFormat(" {0},", InterfaceCadUsuario.GetIdcSelect(
-                    "@CadUsuario_CodUsuarioValidacao"));
                 sql.Append(" );");
                 IDbCommand cmd = pf.CreateCommand(sql.ToString(), conn);
                 cmd.CommandTimeout = TIMEOUT_IMPORT;
@@ -180,9 +164,27 @@ ${entity.Properties.map(prop => renderPropertyInToString(prop))
 function genereteAppendValue(prop) {
     if (prop.isPrimaryKey) return;
 
-    if (prop.referedEntity) return;
+    if (prop.referedEntity) {
+        return `\t\t\t\tsql.AppendFormat(" {0},", Interface${prop.referedEntity.className}.GetIdcSelect(\n${generateSelectUnique(prop).replace(/",$/, '"')}));`;
+    };
 
     return `\t\t\t\tsql.Append(" @${prop.columnName},");`
+}
+
+function generateSelectUnique(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
+    if (!prop.referedEntity.uniqueKey) {
+        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        return `\n\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
+    }
+
+    // Percorre as chaves da tabela referenciada.
+    return prop.referedEntity.uniqueKey.properties.map(refProp => {
+        if (refProp.referedEntity) {
+            return generateSelectUnique(refProp, (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), (prop.suffix || suffix), (atLeastOnePropNullable || prop.isNullable));
+        }
+
+        return generateUkParam(preffix, prop, refProp, suffix, atLeastOnePropNullable);
+    }).filter(line => line).join('\n');
 }
 
 function generateAppendcolum(prop) {
@@ -390,6 +392,16 @@ function generateExportClassProperty(preffix, prop, refProp, suffix, atLeastOneP
     ret += prop.referedEntity.className + "_";
     ret += refProp.propertyName + (prop.suffix || '') + suffix;
     ret += " { get; set; }";
+    return ret;
+}
+
+function generateUkParam(preffix, prop, refProp, suffix, atLeastOnePropNullable) {
+    let ret = "";
+    ret += '\t\t\t\t\t"@';
+    ret += preffix ? `${preffix.replace(/\./g, "_")}_` : "";
+    ret += prop.referedEntity.className + "_";
+    ret += refProp.propertyName + (prop.suffix || '') + suffix;
+    ret += '",';
     return ret;
 }
 
