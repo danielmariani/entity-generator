@@ -108,24 +108,7 @@ ${entity.Properties.map(genereteAppendValue).filter(line => line).join("\n").rep
                 sql.Append(" );");
                 IDbCommand cmd = pf.CreateCommand(sql.ToString(), conn);
                 cmd.CommandTimeout = TIMEOUT_IMPORT;
-                cmd.Parameters.Add(pf.CreateParameter("@CadPosto_CadUnidade_CadComplexo_CadDiretoria_SglDiretoria", values[0], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadPosto_CadUnidade_CadComplexo_SglComplexo", values[1], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadPosto_CadUnidade_SglUnidade", values[2], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadPosto_SglPosto", values[3], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadTurno_DscTurno", values[4], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadTurno_HorFinal", values[5], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadTurno_HorInicio", values[6], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadTurno_SglTurno", values[7], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadUsuario_CodUsuarioAbertura", values[8], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@CadUsuario_CodUsuarioFechamento", values[9], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@SGL_TURNO", values[10], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@DTH_INICIAL", values[11], DbType.DateTime));
-                cmd.Parameters.Add(pf.CreateParameter("@DTH_FINAL", values[12], DbType.DateTime));
-                cmd.Parameters.Add(pf.CreateParameter("@STU_TURNO", values[13], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@NOM_DISPOSITIVO", values[14], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@DTH_CRIACAO_REG", values[15], DbType.DateTime));
-                cmd.Parameters.Add(pf.CreateParameter("@CadUsuario_CodUsuarioValidacao", values[16], DbType.String));
-                cmd.Parameters.Add(pf.CreateParameter("@DTH_VALIDACAO", string.IsNullOrWhiteSpace(values[17]) ? DBNull.Value : (object)values[17], DbType.DateTime));
+${addParameter(entity.Properties)}
                 cmd.ExecuteNonQuery();
             }
         }
@@ -161,6 +144,30 @@ ${entity.Properties.map(prop => renderPropertyInToString(prop))
     }
 }
 
+function addParameter(properties) {
+    const counter = { value: 0 };
+    return properties.map(p => genereteAddParameter(p, counter))
+        .filter(line => line)
+        .join("\n")
+        .replace(/,"\);$/, '");')
+}
+
+function genereteAddParameter(prop, counter) {
+
+    if (prop.isPrimaryKey) return;
+
+    if (prop.referedEntity) {
+        return generateUkAddParameter(prop, "", "", prop.isNullable, counter);
+    };
+
+    if (prop.isNullable) {
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", string.IsNullOrWhiteSpace(values[${counter.value}]) ? DBNull.Value : (object)values[${counter.value++}], DbType.${prop.type.DbType}));`;
+    } else {
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", values[${counter.value++}], DbType.${prop.type.DbType}));`;
+    }
+
+}
+
 function genereteAppendValue(prop) {
     if (prop.isPrimaryKey) return;
 
@@ -184,6 +191,22 @@ function generateSelectUnique(prop, preffix = "", suffix = "", atLeastOnePropNul
         }
 
         return generateUkParam(preffix, prop, refProp, suffix, atLeastOnePropNullable);
+    }).filter(line => line).join('\n');
+}
+
+function generateUkAddParameter(prop, preffix = "", suffix = "", atLeastOnePropNullable = false, counter) {
+    if (!prop.referedEntity.uniqueKey) {
+        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        return `\n\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
+    }
+
+    // Percorre as chaves da tabela referenciada.
+    return prop.referedEntity.uniqueKey.properties.map(refProp => {
+        if (refProp.referedEntity) {
+            return generateUkAddParameter(refProp, (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), (prop.suffix || suffix), (atLeastOnePropNullable || prop.isNullable), counter);
+        }
+
+        return generateUkAddParameterString(preffix, prop, refProp, suffix, atLeastOnePropNullable, counter);
     }).filter(line => line).join('\n');
 }
 
@@ -403,6 +426,19 @@ function generateUkParam(preffix, prop, refProp, suffix, atLeastOnePropNullable)
     ret += refProp.propertyName + (prop.suffix || '') + suffix;
     ret += '",';
     return ret;
+}
+
+function generateUkAddParameterString(preffix, prop, refProp, suffix, atLeastOnePropNullable, counter) {
+    let ret = "";
+    ret += preffix ? `${preffix.replace(/\./g, "_")}_` : "";
+    ret += prop.referedEntity.className + "_";
+    ret += refProp.propertyName + (prop.suffix || '') + suffix;
+
+    if (atLeastOnePropNullable) {
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${ret}", string.IsNullOrWhiteSpace(values[${counter.value}]) ? DBNull.Value : (object)values[${counter.value++}], DbType.String));`;;
+    } else {
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${ret}", values[${counter.value++}], DbType.String));`;;
+    }
 }
 
 function generateExportGetHeaders(preffix, prop, refProp, suffix, atLeastOnePropNullable) {
