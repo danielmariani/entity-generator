@@ -32,7 +32,7 @@ module.exports = {
         "nullability": "questionMark",
         "lengthInfo": "",
         "typeName": "",
-        "DbType": "Time"
+        "DbType": "String"
     },
     "decimal": {
         "csharpType": "decimal",

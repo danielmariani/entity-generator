@@ -116,7 +116,7 @@ ${addParameter(entity.Properties)}
         public static string GetIdcSelect(${generateGetIdcSelectParamContainer(entity)})
         {
             var sb = new StringBuilder();
-            sb.Append("(SELECT ${entity.Properties.filter(p => p.isPrimaryKey)[0].columnName} FROM ${entity.tableName}");
+            sb.Append("(SELECT TOP 1 ${entity.Properties.filter(p => p.isPrimaryKey)[0].columnName} FROM ${entity.tableName}");
 ${generateLeftJoin(entity)}
             sb.Append(" WHERE 1=1 ");
 ${generateGetIdcSelectBody(entity)}
@@ -223,7 +223,7 @@ function addParameter(properties) {
 
 function genereteAddParameter(prop, counter) {
 
-    if (prop.isPrimaryKey) return;
+    if (prop.isPrimaryKey && (!prop.referedEntity)) return;
 
     if (prop.referedEntity) {
         return generateUkAddParameter(prop, "", "", prop.isNullable, counter);
@@ -238,13 +238,18 @@ function genereteAddParameter(prop, counter) {
 }
 
 function genereteAppendValue(prop) {
-    if (prop.isPrimaryKey) return;
+    if (prop.isPrimaryKey && (!prop.referedEntity)) return;
 
     if (prop.referedEntity) {
         let params = generateSelectUnique(prop).replace(/",$/, '"');
         params = params ? "\n" + params : "";
         return `\t\t\t\tsql.AppendFormat(" {0},", Interface${prop.referedEntity.className}.GetIdcSelect(${params}));`;
     };
+
+    //TODO - Remover essa gambi
+    if (prop.propertyName === "DthCriacaoReg") {
+        return `\t\t\t\tsql.Append(" GETDATE(),");`
+    }
 
     return `\t\t\t\tsql.Append(" @${prop.columnName},");`
 }
@@ -283,13 +288,13 @@ function generateUkAddParameter(prop, preffix = "", suffix = "", atLeastOnePropN
 }
 
 function generateAppendcolum(prop) {
-    if (prop.isPrimaryKey) return;
+    if (prop.isPrimaryKey && (!prop.referedEntity)) return;
 
     return `\t\t\t\tsql.Append(" ${prop.columnName},");`;
 }
 
 function renderPropertyInImport(prop) {
-    if (prop.isPrimaryKey) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
         return '';
     }
 
@@ -364,7 +369,7 @@ function renderUkDicWhere(prop, preffix = "", propOwner = '') {
 
 
 function renderPropertyInExport(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
-    if (prop.isPrimaryKey) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
         return '';
     }
 
@@ -388,7 +393,7 @@ function renderPropertyInExport(prop, preffix = "", suffix = "", atLeastOnePropN
 }
 
 function renderPropertyInExportClass(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
-    if (prop.isPrimaryKey) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
         return '';
     }
 
@@ -413,7 +418,7 @@ function renderPropertyInExportClass(prop, preffix = "", suffix = "", atLeastOne
 }
 
 function renderPropertyInGetHeaders(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
-    if (prop.isPrimaryKey) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
         return '';
     }
 
@@ -437,7 +442,7 @@ function renderPropertyInGetHeaders(prop, preffix = "", suffix = "", atLeastOneP
 }
 
 function renderPropertyInToString(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
-    if (prop.isPrimaryKey) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
         return '';
     }
 
@@ -507,9 +512,9 @@ function generateUkAddParameterString(preffix, prop, refProp, suffix, atLeastOne
     ret += refProp.propertyName + (prop.suffix || '') + suffix;
 
     if (atLeastOnePropNullable) {
-        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${ret}", string.IsNullOrWhiteSpace(values[${counter.value}]) ? DBNull.Value : (object)values[${counter.value++}], DbType.String));`;;
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${ret}", string.IsNullOrWhiteSpace(values[${counter.value}]) ? DBNull.Value : (object)values[${counter.value++}], DbType.${refProp.type.DbType}));`;;
     } else {
-        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${ret}", values[${counter.value++}], DbType.String));`;;
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${ret}", values[${counter.value++}], DbType.${refProp.type.DbType}));`;;
     }
 }
 
