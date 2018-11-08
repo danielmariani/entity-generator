@@ -67,7 +67,7 @@ module.exports = {
         "nullability": "questionMark",
         "lengthInfo": "",
         "typeName": "",
-        "DbType": "byte"
+        "DbType": "Byte"
     },
     "varbinary": {
         "csharpType": "byte[]",

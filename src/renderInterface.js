@@ -112,6 +112,17 @@ ${addParameter(entity.Properties)}
                 cmd.ExecuteNonQuery();
             }
         }
+
+        public static string GetIdcSelect(${generateGetIdcSelectParamContainer(entity)})
+        {
+            var sb = new StringBuilder();
+            sb.Append("(SELECT ${entity.Properties.filter(p => p.isPrimaryKey)[0].columnName} FROM ${entity.tableName}");
+${generateLeftJoin(entity)}
+            sb.Append(" WHERE 1=1 ");
+${generateGetIdcSelectBody(entity)}
+            sb.Append(")");
+            return sb.ToString();
+        }
     }
 
     public class ${entity.className}Export : CSVExportable
@@ -144,6 +155,64 @@ ${entity.Properties.map(prop => renderPropertyInToString(prop))
     }
 }
 
+function generateGetIdcSelectParamContainer(entity) {
+    let params = generateGetIdcSelectParam(entity).replace(/,$/, '');
+    params = params ? "\n" + params : "";
+    return params;
+}
+
+function generateLeftJoin(entity) {
+    if (!entity.uniqueKey) return "";
+
+    return entity.uniqueKey.properties
+        .map(prop => {
+            if (!prop.referedEntity) return "";
+
+            const refTableName = prop.referedEntity.tableName;
+            const pk = prop.referedEntity.Properties.filter(p => p.isPrimaryKey)[0].columnName;
+            const tableName = prop.entity.tableName;
+            const fk = prop.columnName;
+
+            const line = `\t\t\tsb.Append(" LEFT JOIN ${refTableName} ON ${refTableName}.${pk} = ${tableName}.${fk}");`;
+
+            return `${line}\n${generateLeftJoin(prop.referedEntity)}`;
+        })
+        .filter(line => line)
+        .join("\n");
+}
+
+function generateGetIdcSelectBody(entity) {
+    if (!entity.uniqueKey) return "";
+
+    return entity.uniqueKey.properties
+        .map(prop => {
+            if (prop.referedEntity) {
+                return generateGetIdcSelectBody(prop.referedEntity);
+            }
+
+            return `\t\t\tsb.AppendFormat(" AND ${prop.columnName} = {0} ", ${prop.propertyName});`
+        })
+        .filter(line => line)
+        .join("\n")
+        .replace(/,$/, ')');
+}
+
+function generateGetIdcSelectParam(entity) {
+    if (!entity.uniqueKey) return "";
+
+    return entity.uniqueKey.properties
+        .map(prop => {
+            if (prop.referedEntity) {
+                return generateGetIdcSelectParam(prop.referedEntity)
+            }
+            return `\t\t\tstring ${prop.propertyName},`;
+        })
+        .filter(line => line)
+        .join("\n");
+}
+
+
+
 function addParameter(properties) {
     const counter = { value: 0 };
     return properties.map(p => genereteAddParameter(p, counter))
@@ -172,7 +241,9 @@ function genereteAppendValue(prop) {
     if (prop.isPrimaryKey) return;
 
     if (prop.referedEntity) {
-        return `\t\t\t\tsql.AppendFormat(" {0},", Interface${prop.referedEntity.className}.GetIdcSelect(\n${generateSelectUnique(prop).replace(/",$/, '"')}));`;
+        let params = generateSelectUnique(prop).replace(/",$/, '"');
+        params = params ? "\n" + params : "";
+        return `\t\t\t\tsql.AppendFormat(" {0},", Interface${prop.referedEntity.className}.GetIdcSelect(${params}));`;
     };
 
     return `\t\t\t\tsql.Append(" @${prop.columnName},");`
@@ -181,7 +252,8 @@ function genereteAppendValue(prop) {
 function generateSelectUnique(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
     if (!prop.referedEntity.uniqueKey) {
         console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
-        return `\n\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
+        //return `\n\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
+        return "";
     }
 
     // Percorre as chaves da tabela referenciada.
