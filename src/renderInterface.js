@@ -116,7 +116,7 @@ ${addParameter(entity.Properties)}
         public static string GetIdcSelect(${generateGetIdcSelectParamContainer(entity)})
         {
             var sb = new StringBuilder();
-            sb.Append("(SELECT TOP 1 ${entity.Properties.filter(p => p.isPrimaryKey)[0].columnName} FROM ${entity.tableName}");
+            sb.Append("(SELECT TOP 1 ${entity.tableName}.${entity.Properties.filter(p => p.isPrimaryKey)[0].columnName} FROM ${entity.tableName}");
 ${generateLeftJoin(entity)}
             sb.Append(" WHERE 1=1 ");
 ${generateGetIdcSelectBody(entity)}
