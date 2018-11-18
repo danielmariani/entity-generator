@@ -247,9 +247,9 @@ function genereteAppendValue(prop) {
     };
 
     //TODO - Remover essa gambi
-    if (prop.propertyName === "DthCriacaoReg") {
-        return `\t\t\t\tsql.Append(" GETDATE(),");`
-    }
+    // if (prop.propertyName === "DthCriacaoReg") {
+    //     return `\t\t\t\tsql.Append(" GETDATE(),");`
+    // }
 
     return `\t\t\t\tsql.Append(" @${prop.columnName},");`
 }
