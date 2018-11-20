@@ -181,36 +181,35 @@ function generateLeftJoin(entity) {
         .join("\n");
 }
 
-function generateGetIdcSelectBody(entity) {
+function generateGetIdcSelectBody(entity, preffix = "", propOwner = '') {
     if (!entity.uniqueKey) return "";
 
     return entity.uniqueKey.properties
         .map(prop => {
             if (prop.referedEntity) {
-                return generateGetIdcSelectBody(prop.referedEntity);
+                return generateGetIdcSelectBody(prop.referedEntity, `${preffix? preffix+'_' : ''}${prop.referedEntity.className}${(prop.suffix || '')}`, `${propOwner}${prop.referedEntity.className}_`);
             }
 
-            return `\t\t\tsb.AppendFormat(" AND ${prop.columnName} = {0} ", ${prop.propertyName});`
+            return `\t\t\tsb.AppendFormat(" AND ${prop.columnName} = {0} ", ${preffix? preffix+'_' : ''}${prop.propertyName}${(prop.suffix || '')});`
         })
         .filter(line => line)
         .join("\n")
         .replace(/,$/, ')');
 }
 
-function generateGetIdcSelectParam(entity) {
+function generateGetIdcSelectParam(entity, preffix = "", propOwner = '') {
     if (!entity.uniqueKey) return "";
 
     return entity.uniqueKey.properties
         .map(prop => {
             if (prop.referedEntity) {
-                return generateGetIdcSelectParam(prop.referedEntity)
+                return generateGetIdcSelectParam( prop.referedEntity, `${preffix? preffix+'_' : ''}${prop.referedEntity.className}${(prop.suffix || '')}`, `${propOwner}${prop.referedEntity.className}_`)
             }
-            return `\t\t\tstring ${prop.propertyName},`;
+            return `\t\t\tstring ${preffix? preffix+'_' : ''}${prop.propertyName}${(prop.suffix || '')},`;
         })
         .filter(line => line)
         .join("\n");
 }
-
 
 
 function addParameter(properties) {
@@ -398,10 +397,10 @@ function renderPropertyInExportClass(prop, preffix = "", suffix = "", atLeastOne
     }
 
     if (!prop.referedEntity) {
-        const questionMark = prop.isNullable && prop.type.nullability === "questionMark" ? "?" : "";
+        const questionMark = (atLeastOnePropNullable || prop.isNullable) && prop.type.nullability === "questionMark" ? "?" : "";
         return `\t\tpublic ${prop.type.csharpType}${questionMark} ${prop.propertyName} { get; set; }`;
     }
-
+    
     if (!prop.referedEntity.uniqueKey) {
         console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         return `\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
@@ -486,7 +485,7 @@ function generateExportClassProperty(preffix, prop, refProp, suffix, atLeastOneP
     let ret = "";
     ret += "\t\tpublic ";
     ret += refProp.type.csharpType
-    ret += (prop.isNullable || atLeastOnePropNullable) && refProp.type.nullability === "questionMark" ? "?" : "";
+    ret += (refProp.isNullable || atLeastOnePropNullable) && refProp.type.nullability === "questionMark" ? "?" : "";
     ret += " ";
     ret += preffix ? `${preffix.replace(/\./g, "_")}_` : "";
     ret += prop.referedEntity.className + "_";

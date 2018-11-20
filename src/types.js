@@ -89,5 +89,19 @@ module.exports = {
         "lengthInfo": "StringLength",
         "typeName": "",
         "DbType": "String"
+    },
+    "uniqueidentifier": {
+        "csharpType": "string",
+        "nullability": "annotation",
+        "lengthInfo": "StringLength",
+        "typeName": "",
+        "DbType": "String"
+    },
+    "xml": {
+        "csharpType": "string",
+        "nullability": "annotation",
+        "lengthInfo": "StringLength",
+        "typeName": "",
+        "DbType": "String"
     }
 }
