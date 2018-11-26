@@ -187,10 +187,10 @@ function generateGetIdcSelectBody(entity, preffix = "", propOwner = '') {
     return entity.uniqueKey.properties
         .map(prop => {
             if (prop.referedEntity) {
-                return generateGetIdcSelectBody(prop.referedEntity, `${preffix? preffix+'_' : ''}${prop.referedEntity.className}${(prop.suffix || '')}`, `${propOwner}${prop.referedEntity.className}_`);
+                return generateGetIdcSelectBody(prop.referedEntity, `${preffix ? preffix + '_' : ''}${prop.referedEntity.className}${(prop.suffix || '')}`, `${propOwner}${prop.referedEntity.className}_`);
             }
 
-            return `\t\t\tsb.AppendFormat(" AND ${prop.columnName} = {0} ", ${preffix? preffix+'_' : ''}${prop.propertyName}${(prop.suffix || '')});`
+            return `\t\t\tsb.AppendFormat(" AND ${prop.entity.tableName}.${prop.columnName} = {0} ", ${preffix ? preffix + '_' : ''}${prop.propertyName}${(prop.suffix || '')});`
         })
         .filter(line => line)
         .join("\n")
@@ -203,9 +203,9 @@ function generateGetIdcSelectParam(entity, preffix = "", propOwner = '') {
     return entity.uniqueKey.properties
         .map(prop => {
             if (prop.referedEntity) {
-                return generateGetIdcSelectParam( prop.referedEntity, `${preffix? preffix+'_' : ''}${prop.referedEntity.className}${(prop.suffix || '')}`, `${propOwner}${prop.referedEntity.className}_`)
+                return generateGetIdcSelectParam(prop.referedEntity, `${preffix ? preffix + '_' : ''}${prop.referedEntity.className}${(prop.suffix || '')}`, `${propOwner}${prop.referedEntity.className}_`)
             }
-            return `\t\t\tstring ${preffix? preffix+'_' : ''}${prop.propertyName}${(prop.suffix || '')},`;
+            return `\t\t\tstring ${preffix ? preffix + '_' : ''}${prop.propertyName}${(prop.suffix || '')},`;
         })
         .filter(line => line)
         .join("\n");
@@ -400,7 +400,7 @@ function renderPropertyInExportClass(prop, preffix = "", suffix = "", atLeastOne
         const questionMark = (atLeastOnePropNullable || prop.isNullable) && prop.type.nullability === "questionMark" ? "?" : "";
         return `\t\tpublic ${prop.type.csharpType}${questionMark} ${prop.propertyName} { get; set; }`;
     }
-    
+
     if (!prop.referedEntity.uniqueKey) {
         console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         return `\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
