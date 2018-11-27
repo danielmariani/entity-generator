@@ -22,6 +22,7 @@ namespace ${namespace}.Interfaces
     using System.Text;
     using IHM.Data.DbProviderFactory;
     using System.Data;
+    using System.Linq.Expressions;
 
     public partial class Interface${entity.className} : InterfaceDataAccess<${entity.className}, Interface${entity.className}.Filtros>
     {
@@ -35,14 +36,16 @@ namespace ${namespace}.Interfaces
             base.DbSet = db.${entity.className};
         }
 
-        public IQueryable<${entity.className}Export> Export()
+        public IQueryable<${entity.className}Export> Export(Expression<Func<${entity.className}, bool>> predicate = null)
         {
             db.Database.CommandTimeout = TIMEOUT_EXPORT;
             
             return db.${entity.className}
+                .Where(predicate ?? (x => true))
                 .Select(
                 reg => new ${entity.className}Export
                 {
+                    Key = reg.${entity.Properties.filter(p => p.isPrimaryKey)[0].propertyName},
 ${entity.Properties.map(prop => renderPropertyInExport(prop))
                 .filter(line => line)
                 .join('\n')}
@@ -94,7 +97,7 @@ ${entity.Properties.map(prop => renderPropertyInImport(prop))
 
         }
 
-        public void Import(string[] values)
+        public string Import(string[] values)
         {
             IProviderFactory pf = ProviderFactories.GetFactory(base.ConnectionString);
             using (IDbConnection conn = pf.CreateConnection(base.ConnectionString))
@@ -103,14 +106,35 @@ ${entity.Properties.map(prop => renderPropertyInImport(prop))
                 StringBuilder sql = new StringBuilder();
                 sql.Append("insert into ${entity.tableName} (");
 ${entity.Properties.map(generateAppendcolum).filter(line => line).join("\n").replace(/,"\);$/, '");')}
-                sql.Append(" ) values (");
+                sql.Append(" ) output");
+                sql.Append(" inserted.${entity.Properties.filter(p => p.isPrimaryKey)[0].columnName}");
+                sql.Append(" values (");
 ${entity.Properties.map(genereteAppendValue).filter(line => line).join("\n").replace(/,"\);$/, '");')}                    
                 sql.Append(" );");
                 IDbCommand cmd = pf.CreateCommand(sql.ToString(), conn);
                 cmd.CommandTimeout = TIMEOUT_IMPORT;
 ${addParameter(entity.Properties)}
-                cmd.ExecuteNonQuery();
+
+                // Executa o comando e preenche campos de retorno
+                using (IDataReader reader = cmd.ExecuteReader())
+                {                    
+                    if (reader.Read())
+                    {
+                        if (!reader.IsDBNull(0))
+                        {
+                            var id = reader.GetInt32(0);
+                            return $"UPDATE ${entity.tableName} SET IDC_REMOTO = {id} WHERE IDC_REMOTO = {values[0]};\\n";
+                        }
+                        else
+                        {
+                            throw new Exception("Nao houve retorno do campo key.");
+                        }
+
+                    }                    
+                }
             }
+
+            return null;
         }
 
         public static string GetIdcSelect(${generateGetIdcSelectParamContainer(entity)})
@@ -127,6 +151,7 @@ ${generateGetIdcSelectBody(entity)}
 
     public class ${entity.className}Export : CSVExportable
     {
+        public int? Key { get; set; }
 ${entity.Properties.map(prop => renderPropertyInExportClass(prop))
                 .filter(line => line)
                 .join('\n')}        
@@ -134,6 +159,7 @@ ${entity.Properties.map(prop => renderPropertyInExportClass(prop))
         public string GetHeaders()
         {
             var sb = new StringBuilder();
+            sb.Append("Key;");
 ${entity.Properties.map(prop => renderPropertyInGetHeaders(prop))
                 .filter(line => line)
                 .join('\n')}  
@@ -144,6 +170,8 @@ ${entity.Properties.map(prop => renderPropertyInGetHeaders(prop))
         public override string ToString()
         {
             var sb = new StringBuilder();
+            sb.Append(Key);
+            sb.Append(";");
 ${entity.Properties.map(prop => renderPropertyInToString(prop))
                 .filter(line => line)
                 .join('\n')}  
@@ -213,7 +241,7 @@ function generateGetIdcSelectParam(entity, preffix = "", propOwner = '') {
 
 
 function addParameter(properties) {
-    const counter = { value: 0 };
+    const counter = { value: 1 };
     return properties.map(p => genereteAddParameter(p, counter))
         .filter(line => line)
         .join("\n")
@@ -367,7 +395,13 @@ function renderUkDicWhere(prop, preffix = "", propOwner = '') {
 }
 
 
-function renderPropertyInExport(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
+function renderPropertyInExport(
+    prop, 
+    preffix = "", 
+    suffix = "", 
+    atLeastOnePropNullable = false
+) {
+
     if (prop.isPrimaryKey && (!prop.referedEntity)) {
         return '';
     }
@@ -384,14 +418,25 @@ function renderPropertyInExport(prop, preffix = "", suffix = "", atLeastOnePropN
     // Percorre as chaves da tabela referenciada.
     return prop.referedEntity.uniqueKey.properties.map(refProp => {
         if (refProp.referedEntity) {
-            return renderPropertyInExport(refProp, (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), (prop.suffix || suffix), (atLeastOnePropNullable || prop.isNullable));
+            return renderPropertyInExport(
+                refProp, 
+                (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), 
+                (prop.suffix || suffix), 
+                (atLeastOnePropNullable || prop.isNullable)
+            );
         }
 
         return generateUkProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable);
     }).filter(line => line).join('\n');
 }
 
-function renderPropertyInExportClass(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
+function renderPropertyInExportClass(
+    prop, 
+    preffix = "", 
+    suffix = "", 
+    atLeastOnePropNullable = false
+) {
+
     if (prop.isPrimaryKey && (!prop.referedEntity)) {
         return '';
     }
@@ -409,7 +454,12 @@ function renderPropertyInExportClass(prop, preffix = "", suffix = "", atLeastOne
     // Percorre as chaves da tabela referenciada.
     return prop.referedEntity.uniqueKey.properties.map(refProp => {
         if (refProp.referedEntity) {
-            return renderPropertyInExportClass(refProp, (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), (prop.suffix || suffix), (atLeastOnePropNullable || prop.isNullable));
+            return renderPropertyInExportClass(
+                refProp, 
+                (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), 
+                (prop.suffix || suffix),
+                (atLeastOnePropNullable || prop.isNullable)
+            );
         }
 
         return generateExportClassProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable);
@@ -485,7 +535,7 @@ function generateExportClassProperty(preffix, prop, refProp, suffix, atLeastOneP
     let ret = "";
     ret += "\t\tpublic ";
     ret += refProp.type.csharpType
-    ret += (refProp.isNullable || atLeastOnePropNullable) && refProp.type.nullability === "questionMark" ? "?" : "";
+    ret += (refProp.isNullable || prop.isNullable || atLeastOnePropNullable) && refProp.type.nullability === "questionMark" ? "?" : "";
     ret += " ";
     ret += preffix ? `${preffix.replace(/\./g, "_")}_` : "";
     ret += prop.referedEntity.className + "_";
