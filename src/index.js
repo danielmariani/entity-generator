@@ -111,9 +111,9 @@ getConfig().then(config => {
         // return a;
 
         return [
-            'V5KRETPT'
+            // 'V5KRETPT'
             // 'REG_TURNO',
-            // 'REG_TURNO_BLOCO_MEDIDOR',
+            'REG_TURNO_BLOCO_MEDIDOR',
             // 'REG_TURNO_TANQUE_POSTO',
             // 'REG_TURNO_FECHAMENTO',
             // 'REG_RATEIO',
