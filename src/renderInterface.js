@@ -152,7 +152,8 @@ ${addParameter(entity.Properties)}
         public string ImportMap(string[] values)
         {
             var uniqueKey = string.Join("|", new object[] { ${generateUniqueValuesInOrder(entity)} })
-                .ToUpper();
+                .ToUpper()
+                .Trim();
 
             if (
                 (!SkipDuplicateCheck("${entity.tableName}")) &&
@@ -243,7 +244,7 @@ ${generateGetUniqueMapSelect(entity)}
 ${((entity.uniqueKey || {}).properties || []).map(prop => renderGetUniqueMapStringBuilder(prop))
                 .filter(line => line)
                 .join('\n')}
-                }).ToUpper(), p => p.${getPk(entity).propertyName});
+                }).ToUpper().Trim(), p => p.${getPk(entity).propertyName});
         }
     }
 
