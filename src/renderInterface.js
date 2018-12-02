@@ -29,13 +29,6 @@ namespace ${namespace}.Interfaces
         public Interface${entity.className}()
         {
             base.DbSet = db.${entity.className};
-
-${generateMapInit(entity)}
-
-            if(!SkipDuplicateCheck("${entity.tableName}"))
-            {
-                Map${entity.className} = GetUniqueMap();
-            }
         }
 
         public Interface${entity.className}(Context db) : base(db)
@@ -43,9 +36,19 @@ ${generateMapInit(entity)}
             base.DbSet = db.${entity.className};
         }
 
-${generateMapDeclare(entity)}
 
-        public Dictionary<string, ${getPk(entity).type.csharpType}> Map${entity.className} { get; set; }
+${generateMapDeclare(entity)}
+        private Dictionary<string, ${getPk(entity).type.csharpType}> _map${entity.className};
+        public Dictionary<string, ${getPk(entity).type.csharpType}> Map${entity.className}
+        {
+            get
+            {
+                if (_map${entity.className} is null)
+                    _map${entity.className} = GetUniqueMap();
+
+                return _map${entity.className};
+            }
+        }
 
         public IQueryable<${entity.className}Export> Export(Expression<Func<${entity.className}, bool>> predicate = null)
         {
@@ -344,7 +347,21 @@ function generateMapDeclare(entity) {
 
 function generateMapDeclareLine(prop) {
     if (!prop.referedEntity) return "";
-    return `\t\tpublic Dictionary<string, int> Map${prop.referedEntity.className} { get; set; }`;
+
+    const entity = prop.referedEntity;
+
+    return `        private Dictionary<string, ${getPk(entity).type.csharpType}> _map${entity.className};
+        public Dictionary<string, ${getPk(entity).type.csharpType}> Map${entity.className}
+        {
+            get
+            {
+                if (_map${entity.className} is null)
+                    _map${entity.className} = Interface${entity.className}.GetUniqueMap();
+
+                return _map${entity.className};
+            }
+        }
+`;
 }
 
 function filterDuplicates(item, pos, arr) {
