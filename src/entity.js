@@ -107,7 +107,7 @@ class UniqueKey {
             if (entity.Properties) {
                 var p = entity.Properties.find(p => p.columnName === col.COLUMN_NAME);
                 this.properties.push(p);
-
+                p.isUk = true;
             }
         });
     }

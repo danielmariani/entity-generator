@@ -31,6 +31,11 @@ namespace ${namespace}.Interfaces
             base.DbSet = db.${entity.className};
 
 ${generateMapInit(entity)}
+
+            if(!SkipDuplicateCheck("${entity.tableName}"))
+            {
+                Map${entity.className} = GetUniqueMap();
+            }
         }
 
         public Interface${entity.className}(Context db) : base(db)
@@ -39,6 +44,8 @@ ${generateMapInit(entity)}
         }
 
 ${generateMapDeclare(entity)}
+
+        public Dictionary<string, ${getPk(entity).type.csharpType}> Map${entity.className} { get; set; }
 
         public IQueryable<${entity.className}Export> Export(Expression<Func<${entity.className}, bool>> predicate = null)
         {
@@ -50,9 +57,7 @@ ${generateMapDeclare(entity)}
                 reg => new ${entity.className}Export
                 {
                     Key = ${getPkName(entity)},
-${entity.Properties.map(prop => renderPropertyInExport(prop))
-                .filter(line => line)
-                .join('\n')}
+${generatePropertyInExport(entity)}
                 });
         }
 
@@ -143,6 +148,20 @@ ${addParameter(entity.Properties)}
 
         public string ImportMap(string[] values)
         {
+            var uniqueKey = string.Join("|", new object[] { ${generateUniqueValuesInOrder(entity)} })
+                .ToUpper();
+
+            if (
+                (!SkipDuplicateCheck("${entity.tableName}")) &&
+                (!string.IsNullOrEmpty(uniqueKey)) && 
+                Map${entity.className}.ContainsKey(uniqueKey)
+            )
+            {
+                InsertIdcRemotoMap("${entity.tableName}", Convert.ToInt32(values[0]), Map${entity.className}[uniqueKey]);
+                return null;
+            }
+
+
             IProviderFactory pf = ProviderFactories.GetFactory(base.ConnectionString);
             using (IDbConnection conn = pf.CreateConnection(base.ConnectionString))
             {
@@ -168,7 +187,7 @@ ${addParameterMap(entity.Properties)}
                         if (!reader.IsDBNull(0))
                         {
                             var id = reader.GetInt32(0);
-                            return $"UPDATE ${entity.tableName} SET IDC_REMOTO = {id} WHERE IDC_REMOTO = {values[0]};\\n";
+                            InsertIdcRemotoMap("${entity.tableName}", Convert.ToInt32(values[0]), id);
                         }
                         else
                         {
@@ -197,13 +216,13 @@ ${generateGetIdcSelectBody(entity)}
         {
             var entity = base.DbSet
 ${((entity.uniqueKey || {}).properties || []).map(prop => renderGetUniqueValuesInclude(prop))
-            .filter(line => line)
-            .join('\n')}                
+                .filter(line => line)
+                .join('\n')}                
                 .Where(p => p.${getPk(entity).propertyName} == id).First();
             var values = new List<object>();
 ${((entity.uniqueKey || {}).properties || []).map(prop => renderGetUniqueValues(prop))
-            .filter(line => line)
-            .join('\n')}
+                .filter(line => line)
+                .join('\n')}
             return values.ToArray();
         }
 
@@ -214,18 +233,14 @@ ${((entity.uniqueKey || {}).properties || []).map(prop => renderGetUniqueValues(
             return db.${entity.className}
                 .Where(predicate ?? (x => true))
                 .Select(p => new {
-${((entity.uniqueKey || {}).properties || []).map(prop => renderGetUniqueMapSelect(prop))
-                    .filter(line => line)
-                    .join('\n')}
+${generateGetUniqueMapSelect(entity)}
                     p.${getPk(entity).propertyName}
                 })
-                .ToDictionary(p => {
-                    var sb = new StringBuilder();
+                .ToDictionary(p => string.Join("|", new object[] {
 ${((entity.uniqueKey || {}).properties || []).map(prop => renderGetUniqueMapStringBuilder(prop))
-                    .filter(line => line)
-                    .join('\n')}
-                    return sb.ToString().ToUpper();
-                }, p => p.${getPk(entity).propertyName});
+                .filter(line => line)
+                .join('\n')}
+                }).ToUpper(), p => p.${getPk(entity).propertyName});
         }
     }
 
@@ -263,7 +278,50 @@ ${entity.Properties.map(prop => renderPropertyInToString(prop))
     }
 }
 
-function generateMapInit(entity){
+function generateGetUniqueMapSelect(entity) {
+    return ((entity.uniqueKey || {}).properties || [])
+        .map(prop => renderGetUniqueMapSelect(prop))
+        .filter(line => line)
+        .join('\n')
+}
+
+function generateUniqueValuesInOrder(entity) {
+    // values[1], values[2], values[3], values[6]
+
+    const uniqueValues = generatePropertyInExport(entity)
+        .split('\n')
+        .filter(line => line)
+        .map((line, index) => ({
+            isUk: line.includes(' //UNIQUE KEY'),
+            value: line.split(' = ')[0].trim(),
+            index
+        }))
+        .filter(line => line.isUk);
+
+    const uniqueValuesInOrder = generateGetUniqueMapSelect(entity)
+        .split('\n')
+        .filter(line => line)
+        .map(line => ({
+            value: line.split(' = ')[0].trim().replace(/^_/, ''),
+            position: uniqueValues.find(uv => uv.value === line.split(' = ')[0].trim().replace(/^_/, '')).index
+        }));
+
+    if (uniqueValues.length != uniqueValuesInOrder.length) {
+        console.log(`Tamanhos diferentes de UK [${uniqueValues.length}] [${uniqueValuesInOrder.length}] ${entity.className}`);
+    }
+
+    return uniqueValuesInOrder
+        .map(line => `values[${line.position + 1}]`)
+        .join(', ');
+}
+
+function generatePropertyInExport(entity) {
+    return entity.Properties.map(prop => renderPropertyInExport(prop))
+        .filter(line => line)
+        .join('\n');
+}
+
+function generateMapInit(entity) {
     return entity.Properties
         .map(generateMapInitLine)
         .filter(line => line)
@@ -271,12 +329,12 @@ function generateMapInit(entity){
         .join('\n')
 }
 
-function generateMapInitLine(prop){
+function generateMapInitLine(prop) {
     if (!prop.referedEntity) return "";
     return `\t\t\tMap${prop.referedEntity.className} = Interface${prop.referedEntity.className}.GetUniqueMap();`;
 }
 
-function generateMapDeclare(entity){
+function generateMapDeclare(entity) {
     return entity.Properties
         .map(generateMapDeclareLine)
         .filter(line => line)
@@ -284,7 +342,7 @@ function generateMapDeclare(entity){
         .join('\n')
 }
 
-function generateMapDeclareLine(prop){
+function generateMapDeclareLine(prop) {
     if (!prop.referedEntity) return "";
     return `\t\tpublic Dictionary<string, int> Map${prop.referedEntity.className} { get; set; }`;
 }
@@ -293,14 +351,14 @@ function filterDuplicates(item, pos, arr) {
     return arr.indexOf(item) == pos;
 }
 
-function getPk(entity){
+function getPk(entity) {
     return entity.Properties.filter(p => p.isPrimaryKey)[0];
 }
 
-function getPkName(entity){
+function getPkName(entity) {
     let pk = getPk(entity)
 
-    if(pk.type.csharpType == 'string'){
+    if (pk.type.csharpType == 'string') {
         return 'null';
     }
 
@@ -381,12 +439,12 @@ function addParameterMap(properties) {
 }
 
 
-function countUk(entity, counter = { count: 0}){
+function countUk(entity, counter = { count: 0 }) {
 
-    if(!entity.uniqueKey) return counter.count;
+    if (!entity.uniqueKey) return counter.count;
 
     entity.uniqueKey.properties.forEach(ukProp => {
-        if(ukProp.referedEntity){
+        if (ukProp.referedEntity) {
             countUk(ukProp.referedEntity, counter);
         } else {
             counter.count++;
@@ -396,7 +454,7 @@ function countUk(entity, counter = { count: 0}){
     return counter.count;
 }
 
-function genereteAddParameterMap(prop, counter){
+function genereteAddParameterMap(prop, counter) {
     if (prop.isPrimaryKey && (!prop.referedEntity)) return;
 
     let increment = 1;
@@ -405,26 +463,26 @@ function genereteAddParameterMap(prop, counter){
     let fk = false;
     let value = `values[${counter.value}]`;
 
-    if(prop.referedEntity){
+    if (prop.referedEntity) {
         if (!prop.referedEntity.uniqueKey) {
-            console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+            // console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
             returnValue = `/* TODO Resolver classe sem UK: reg.${prop.propertyName} */`;
         } else {
             qtdUk = countUk(prop.referedEntity);
             let valueString = new Array(qtdUk)
                 .fill(0)
                 .map((v, i) => `values[${counter.value + i}]`)
-                .join(" + ");
+                .join(", ");
 
-            value = `GetIdcInMap(Map${prop.referedEntity.className}, ${valueString})`;
-            increment += qtdUk -1;
+            value = `GetIdcInMap(Map${prop.referedEntity.className}, string.Join("|", new object[] { ${valueString} }))`;
+            increment += qtdUk - 1;
         }
     }
 
     if (prop.isNullable) {
         returnValue = `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", string.IsNullOrWhiteSpace(values[${counter.value}]) ? DBNull.Value : (object)${value}, DbType.${prop.type.DbType}));`;
     } else {
-        returnValue =  `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", ${value}, DbType.${prop.type.DbType}));`;
+        returnValue = `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", ${value}, DbType.${prop.type.DbType}));`;
     }
 
     counter.value += increment;
@@ -467,7 +525,7 @@ function genereteAppendValueMap(prop) {
 
 function generateSelectUnique(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
     if (!prop.referedEntity.uniqueKey) {
-        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        //console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         //return `\n\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
         return "";
     }
@@ -484,7 +542,7 @@ function generateSelectUnique(prop, preffix = "", suffix = "", atLeastOnePropNul
 
 function generateUkAddParameter(prop, preffix = "", suffix = "", atLeastOnePropNullable = false, counter) {
     if (!prop.referedEntity.uniqueKey) {
-        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        //console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         return `\n\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
     }
 
@@ -568,29 +626,33 @@ function renderGetUniqueValues(prop, preffix = "", propOwner = '') {
     return `\t\t\tvalues.Add(entity${preffix}.${prop.propertyName}${(prop.suffix || '')});`;
 }
 
-function renderGetUniqueMapSelect(prop, preffix = "") {
+function renderGetUniqueMapSelect(prop, preffix = "", suffix = '') {
 
     if (prop.referedEntity && prop.referedEntity.uniqueKey) {
         return prop.referedEntity.uniqueKey.properties.map(refProp => renderGetUniqueMapSelect(
-            refProp, 
-            `${preffix}.${refProp.entity.className}${(prop.suffix || '')}`
+            refProp,
+            `${preffix}.` + refProp.entity.className + (prop.suffix || ""),
+            //`${preffix}.${refProp.entity.className}`,
+            (suffix || prop.suffix || '')
         )).filter(line => line).join("\n");
     }
-    const propName = (`${preffix}.${prop.propertyName}${(prop.suffix || '')}`).replace(/\./g,"_");
+    const propName = (`${preffix}.${prop.propertyName}${(suffix || prop.suffix || '')}`).replace(/\./g, "_");
     return `\t\t\t\t\t${propName} = p${preffix}.${prop.propertyName}${(prop.suffix || '')},`;
 }
 
-function renderGetUniqueMapStringBuilder(prop, preffix = "") {
+function renderGetUniqueMapStringBuilder(prop, preffix = "", suffix = '') {
 
     if (prop.referedEntity && prop.referedEntity.uniqueKey) {
         return prop.referedEntity.uniqueKey.properties.map(refProp => renderGetUniqueMapStringBuilder(
-            refProp, 
-            `${preffix}.${refProp.entity.className}${(prop.suffix || '')}`
+            refProp,
+            `${preffix}.` + refProp.entity.className + (prop.suffix || ""),
+            //`${preffix}.${refProp.entity.className}${(prop.suffix || '')}`
+            (suffix || prop.suffix || '')
         )).filter(line => line).join("\n");
     }
 
-    const propName = (`${preffix}.${prop.propertyName}${(prop.suffix || '')}`).replace(/\./g,"_");
-    return `\t\t\t\t\tsb.Append(p.${propName});`;
+    const propName = (`${preffix}.${prop.propertyName}${(suffix || prop.suffix || '')}`).replace(/\./g, "_");
+    return `\t\t\t\t\tp.${propName},`;
 }
 
 function renderGetUniqueValuesInclude(prop, preffix = "") {
@@ -598,7 +660,7 @@ function renderGetUniqueValuesInclude(prop, preffix = "") {
     if (prop.referedEntity && prop.referedEntity.uniqueKey) {
         return prop.referedEntity.uniqueKey.properties.map(refProp => {
             return renderGetUniqueValuesInclude(
-                refProp, 
+                refProp,
                 `${preffix ? preffix + '.' : ''}${refProp.entity.className}${(prop.suffix || '')}`
             )
         })
@@ -606,7 +668,7 @@ function renderGetUniqueValuesInclude(prop, preffix = "") {
             .join("\n");
     }
 
-    if(!preffix) return '';
+    if (!preffix) return '';
 
     return `\t\t\t\t.Include("${preffix}")`;
 }
@@ -634,10 +696,12 @@ function renderUkDicWhere(prop, preffix = "", propOwner = '') {
 
 
 function renderPropertyInExport(
-    prop, 
-    preffix = "", 
-    suffix = "", 
-    atLeastOnePropNullable = false
+    prop,
+    preffix = "",
+    suffix = "",
+    atLeastOnePropNullable = false,
+    isUk = false,
+    level = 1
 ) {
 
     if (prop.isPrimaryKey && (!prop.referedEntity)) {
@@ -645,11 +709,14 @@ function renderPropertyInExport(
     }
 
     if (!prop.referedEntity) {
-        return `\t\t\t\t\t${prop.propertyName} = reg.${prop.propertyName},`;
+
+        const ukComment = isUk || (prop.isUk && level === 1) ? ' //UNIQUE KEY' : '';
+
+        return `\t\t\t\t\t${prop.propertyName} = reg.${prop.propertyName},${ukComment}`;
     }
 
     if (!prop.referedEntity.uniqueKey) {
-        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        //console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         return `\t\t\t\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
     }
 
@@ -657,21 +724,23 @@ function renderPropertyInExport(
     return prop.referedEntity.uniqueKey.properties.map(refProp => {
         if (refProp.referedEntity) {
             return renderPropertyInExport(
-                refProp, 
-                (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), 
-                (prop.suffix || suffix), 
-                (atLeastOnePropNullable || prop.isNullable)
+                refProp,
+                (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""),
+                (prop.suffix || suffix),
+                (atLeastOnePropNullable || prop.isNullable),
+                isUk || (prop.isUk && level === 1),
+                level + 1
             );
         }
 
-        return generateUkProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable);
+        return generateUkProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable, isUk || (prop.isUk && level === 1));
     }).filter(line => line).join('\n');
 }
 
 function renderPropertyInExportClass(
-    prop, 
-    preffix = "", 
-    suffix = "", 
+    prop,
+    preffix = "",
+    suffix = "",
     atLeastOnePropNullable = false
 ) {
 
@@ -685,7 +754,7 @@ function renderPropertyInExportClass(
     }
 
     if (!prop.referedEntity.uniqueKey) {
-        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        //console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         return `\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
     }
 
@@ -693,8 +762,8 @@ function renderPropertyInExportClass(
     return prop.referedEntity.uniqueKey.properties.map(refProp => {
         if (refProp.referedEntity) {
             return renderPropertyInExportClass(
-                refProp, 
-                (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""), 
+                refProp,
+                (preffix ? `${preffix}.` : "") + refProp.entity.className + (prop.suffix || ""),
                 (prop.suffix || suffix),
                 (atLeastOnePropNullable || prop.isNullable)
             );
@@ -714,7 +783,7 @@ function renderPropertyInGetHeaders(prop, preffix = "", suffix = "", atLeastOneP
     }
 
     if (!prop.referedEntity.uniqueKey) {
-        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        //console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         return `\t\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
     }
 
@@ -741,7 +810,7 @@ function renderPropertyInToString(prop, preffix = "", suffix = "", atLeastOnePro
     }
 
     if (!prop.referedEntity.uniqueKey) {
-        console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
+        //console.log(`Tabela ${prop.entity.tableName} referencia a tabela ${prop.referedEntity.tableName} que não possui UK`);
         return `\t\t\t// TODO Resolver classe sem UK: reg.${prop.propertyName},`;
     }
 
@@ -755,16 +824,17 @@ function renderPropertyInToString(prop, preffix = "", suffix = "", atLeastOnePro
     }).filter(line => line).join('\n');
 }
 
-function generateUkProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable) {
+function generateUkProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable, isUk) {
     let ret = "";
     ret += "\t\t\t\t\t";
     ret += preffix ? `${preffix.replace(/\./g, "_")}_` : "";
-    ret += prop.referedEntity.className + "_";
+    ret += prop.referedEntity.className + (prop.suffix || '') + "_";
     ret += refProp.propertyName + (prop.suffix || '') + suffix + " = ";
     ret += (prop.isNullable || atLeastOnePropNullable) && refProp.type.nullability === "questionMark" ? `(${refProp.type.csharpType}?) ` : "";
     ret += `reg.${preffix ? `${preffix}.` : ""}`;
     ret += prop.referedEntity.className + (prop.suffix || '') + ".";
     ret += refProp.propertyName + ",";
+    ret += isUk ? ' //UNIQUE KEY' : '';
 
     return ret;
 }
@@ -776,7 +846,7 @@ function generateExportClassProperty(preffix, prop, refProp, suffix, atLeastOneP
     ret += (refProp.isNullable || prop.isNullable || atLeastOnePropNullable) && refProp.type.nullability === "questionMark" ? "?" : "";
     ret += " ";
     ret += preffix ? `${preffix.replace(/\./g, "_")}_` : "";
-    ret += prop.referedEntity.className + "_";
+    ret += prop.referedEntity.className + (prop.suffix || '') + "_";
     ret += refProp.propertyName + (prop.suffix || '') + suffix;
     ret += " { get; set; }";
     return ret;
@@ -819,7 +889,7 @@ function generateExportToString(preffix, prop, refProp, suffix, atLeastOnePropNu
     let ret = "";
     ret += '\t\t\tsb.Append(';
     ret += preffix ? `${preffix.replace(/\./g, "_")}_` : "";
-    ret += prop.referedEntity.className + "_";
+    ret += prop.referedEntity.className + (prop.suffix || '') + "_";
     ret += refProp.propertyName + (prop.suffix || '') + suffix;
     ret += ');\n';
     ret += '\t\t\tsb.Append(";");'
