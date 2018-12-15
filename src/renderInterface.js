@@ -497,6 +497,8 @@ function genereteAddParameterMap(prop, counter) {
         }
     }
 
+    value = prop.type.csharpType === 'byte[]' ? `Convert.FromBase64String(${value})` : value;
+
     if (prop.isNullable) {
         returnValue = `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", string.IsNullOrWhiteSpace(values[${counter.value}]) ? DBNull.Value : (object)${value}, DbType.${prop.type.DbType}));`;
     } else {
@@ -821,8 +823,10 @@ function renderPropertyInToString(prop, preffix = "", suffix = "", atLeastOnePro
     }
 
     if (!prop.referedEntity) {
+        const imgConvertion = prop.type.csharpType === 'byte[]' ? `Convert.ToBase64String(${prop.propertyName})` : prop.propertyName;
+
         let ret = "";
-        ret += `\t\t\tsb.Append(${prop.propertyName});\n`;
+        ret += `\t\t\tsb.Append(${imgConvertion});\n`;
         ret += '\t\t\tsb.Append(";");'
         return ret;
     }
