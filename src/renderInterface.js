@@ -50,6 +50,20 @@ ${generateMapDeclare(entity)}
             }
         }
 
+        public IQueryable<${entity.className}ExportSimple> ExportSimple(Expression<Func<${entity.className}, bool>> predicate = null)
+        {
+            db.Database.CommandTimeout = TIMEOUT_EXPORT;
+            
+            return db.${entity.className}
+                .Where(predicate ?? (x => true))
+                .Select(
+                reg => new ${entity.className}ExportSimple
+                {
+                    Key = ${getPkName(entity)},
+${generatePropertyInExportSimple(entity)}
+                });
+        }
+
         public IQueryable<${entity.className}Export> Export(Expression<Func<${entity.className}, bool>> predicate = null)
         {
             db.Database.CommandTimeout = TIMEOUT_EXPORT;
@@ -278,6 +292,37 @@ ${entity.Properties.map(prop => renderPropertyInToString(prop))
             return sb.ToString();
         }
     }
+
+    public class ${entity.className}ExportSimple : CSVExportable
+    {
+        public int? Key { get; set; }
+${entity.Properties.map(prop => renderPropertyInExportSimpleClass(prop))
+                .filter(line => line)
+                .join('\n')}        
+
+        public string GetHeaders()
+        {
+            var sb = new StringBuilder();
+            sb.Append("Key;");
+${entity.Properties.map(prop => renderPropertyInGetHeadersSimple(prop))
+                .filter(line => line)
+                .join('\n')}  
+            sb.Append("\\r\\n");
+            return sb.ToString();
+        }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+            sb.Append(Key);
+            sb.Append(";");
+${entity.Properties.map(prop => renderPropertyInToStringSimple(prop))
+                .filter(line => line)
+                .join('\n')}  
+            sb.Append("\\r\\n");
+            return sb.ToString();
+        }
+    }
 }`;
     }
 }
@@ -321,6 +366,12 @@ function generateUniqueValuesInOrder(entity) {
 
 function generatePropertyInExport(entity) {
     return entity.Properties.map(prop => renderPropertyInExport(prop))
+        .filter(line => line)
+        .join('\n');
+}
+
+function generatePropertyInExportSimple(entity) {
+    return entity.Properties.map(prop => renderPropertyInExportSimple(prop))
         .filter(line => line)
         .join('\n');
 }
@@ -757,6 +808,17 @@ function renderPropertyInExport(
     }).filter(line => line).join('\n');
 }
 
+
+function renderPropertyInExportSimple(prop) {
+
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
+        return '';
+    }
+
+    const ukComment = prop.isUk ? ' //UNIQUE KEY' : '';
+    return `\t\t\t\t\t${prop.propertyName} = reg.${prop.propertyName},${ukComment}`;
+}
+
 function renderPropertyInExportClass(
     prop,
     preffix = "",
@@ -793,6 +855,24 @@ function renderPropertyInExportClass(
     }).filter(line => line).join('\n');
 }
 
+function renderPropertyInExportSimpleClass(prop) {
+
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
+        return '';
+    }
+
+    const questionMark = prop.isNullable && prop.type.nullability === "questionMark" ? "?" : "";
+    return `\t\tpublic ${prop.type.csharpType}${questionMark} ${prop.propertyName} { get; set; }`;
+}
+
+function renderPropertyInGetHeadersSimple(prop) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
+        return '';
+    }
+
+    return `\t\t\tsb.Append("${prop.propertyName};");`;
+}
+
 function renderPropertyInGetHeaders(prop, preffix = "", suffix = "", atLeastOnePropNullable = false) {
     if (prop.isPrimaryKey && (!prop.referedEntity)) {
         return '';
@@ -823,7 +903,7 @@ function renderPropertyInToString(prop, preffix = "", suffix = "", atLeastOnePro
     }
 
     if (!prop.referedEntity) {
-        const imgConvertion = prop.type.csharpType === 'byte[]' ? `Convert.ToBase64String(${prop.propertyName})` : prop.propertyName;
+        const imgConvertion = prop.type.csharpType === 'byte[]' ? `${prop.propertyName} == null ? "" : Convert.ToBase64String(${prop.propertyName})` : prop.propertyName;
 
         let ret = "";
         ret += `\t\t\tsb.Append(${imgConvertion});\n`;
@@ -844,6 +924,19 @@ function renderPropertyInToString(prop, preffix = "", suffix = "", atLeastOnePro
 
         return generateExportToString(preffix, prop, refProp, suffix, atLeastOnePropNullable);
     }).filter(line => line).join('\n');
+}
+
+function renderPropertyInToStringSimple(prop) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) {
+        return '';
+    }
+
+    const imgConvertion = prop.type.csharpType === 'byte[]' ? `${prop.propertyName} == null ? "" : Convert.ToBase64String(${prop.propertyName})` : prop.propertyName;
+
+    let ret = "";
+    ret += `\t\t\tsb.Append(${imgConvertion});\n`;
+    ret += '\t\t\tsb.Append(";");'
+    return ret;
 }
 
 function generateUkProperty(preffix, prop, refProp, suffix, atLeastOnePropNullable, isUk) {
