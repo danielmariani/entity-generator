@@ -50,6 +50,18 @@ ${generateMapDeclare(entity)}
             }
         }
 
+        private Dictionary<string, ${getPk(entity).type.csharpType}> _map${entity.className}Simple;
+        public Dictionary<string, ${getPk(entity).type.csharpType}> Map${entity.className}Simple
+        {
+            get
+            {
+                if (_map${entity.className}Simple is null)
+                    _map${entity.className}Simple = GetUniqueMapSimple();
+
+                return _map${entity.className}Simple;
+            }
+        }
+
         public IQueryable<${entity.className}ExportSimple> ExportSimple(Expression<Func<${entity.className}, bool>> predicate = null)
         {
             db.Database.CommandTimeout = TIMEOUT_EXPORT;
@@ -190,7 +202,7 @@ ${entity.Properties.map(generateAppendcolum).filter(line => line).join("\n").rep
                 sql.Append(" ) output");
                 sql.Append(" inserted.${entity.Properties.filter(p => p.isPrimaryKey)[0].columnName}");
                 sql.Append(" values (");
-${entity.Properties.map(genereteAppendValueMap).filter(line => line).join("\n").replace(/,"\);$/, '");')}                    
+${entity.Properties.map(genereteAppendValueMap).filter(line => line).join("\n").replace(/,"\);$/, '");')}
                 sql.Append(" );");
                 IDbCommand cmd = pf.CreateCommand(sql.ToString(), conn);
                 cmd.CommandTimeout = TIMEOUT_IMPORT;
@@ -213,6 +225,62 @@ ${addParameterMap(entity.Properties)}
                         }
 
                     }                    
+                }
+            }
+
+            return null;
+        }
+
+        public string ImportSimple(string[] values)
+        {
+            var uniqueKey = string.Join("|", new object[] { ${generateUniqueValuesInOrderSimple(entity)} })
+                .ToUpper()
+                .Trim();
+
+            if (
+                (!SkipDuplicateCheck("${entity.tableName}")) &&
+                (!string.IsNullOrEmpty(uniqueKey)) &&
+                Map${entity.className}Simple.ContainsKey(uniqueKey)
+            )
+            {
+                InsertIdcRemotoMap("${entity.tableName}", values[0], Map${entity.className}Simple[uniqueKey]);
+                return null;
+            }
+
+
+            IProviderFactory pf = ProviderFactories.GetFactory(base.ConnectionString);
+            using (IDbConnection conn = pf.CreateConnection(base.ConnectionString))
+            {
+                conn.Open();
+                StringBuilder sql = new StringBuilder();
+                sql.Append("insert into ${entity.tableName} (");
+${entity.Properties.map(generateAppendcolum).filter(line => line).join("\n").replace(/,"\);$/, '");')} 
+                sql.Append(" ) output");
+                sql.Append(" inserted.${entity.Properties.filter(p => p.isPrimaryKey)[0].columnName}");
+                sql.Append(" values (");
+${entity.Properties.map(genereteAppendValueMap).filter(line => line).join("\n").replace(/,"\);$/, '");')}
+                sql.Append(" );");
+                IDbCommand cmd = pf.CreateCommand(sql.ToString(), conn);
+                cmd.CommandTimeout = TIMEOUT_IMPORT;
+
+${addParameterMapSimple(entity.Properties)}
+
+                // Executa o comando e preenche campos de retorno
+                using (IDataReader reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        if (!reader.IsDBNull(0))
+                        {
+                            var id = reader.GetInt32(0);
+                            InsertIdcRemotoMap("${entity.tableName}", values[0], id);
+                        }
+                        else
+                        {
+                            throw new Exception("Nao houve retorno do campo key.");
+                        }
+
+                    }
                 }
             }
 
@@ -256,6 +324,23 @@ ${generateGetUniqueMapSelect(entity)}
                 })
                 .ToDictionary(p => string.Join("|", new object[] {
 ${((entity.uniqueKey || {}).properties || []).map(prop => renderGetUniqueMapStringBuilder(prop))
+                .filter(line => line)
+                .join('\n')}
+                }).ToUpper().Trim(), p => p.${getPk(entity).propertyName});
+        }
+
+        public static Dictionary<string, ${getPk(entity).type.csharpType}> GetUniqueMapSimple(Expression<Func<${entity.className}, bool>> predicate = null)
+        {
+            Context db = new Context();
+
+            return db.${entity.className}
+                .Where(predicate ?? (x => true))
+                .Select(p => new {
+${generateGetUniqueMapSelectSimple(entity)}
+                    p.${getPk(entity).propertyName}
+                })
+                .ToDictionary(p => string.Join("|", new object[] {
+${((entity.uniqueKey || {}).properties || []).map(prop => renderGetUniqueMapStringBuilderSimple(prop))
                 .filter(line => line)
                 .join('\n')}
                 }).ToUpper().Trim(), p => p.${getPk(entity).propertyName});
@@ -334,6 +419,13 @@ function generateGetUniqueMapSelect(entity) {
         .join('\n')
 }
 
+function generateGetUniqueMapSelectSimple(entity) {
+    return ((entity.uniqueKey || {}).properties || [])
+        .map(prop => renderGetUniqueMapSelectSimple(prop))
+        .filter(line => line)
+        .join('\n')
+}
+
 function generateUniqueValuesInOrder(entity) {
     // values[1], values[2], values[3], values[6]
 
@@ -353,6 +445,36 @@ function generateUniqueValuesInOrder(entity) {
         .map(line => ({
             value: line.split(' = ')[0].trim().replace(/^_/, ''),
             position: uniqueValues.find(uv => uv.value === line.split(' = ')[0].trim().replace(/^_/, '')).index
+        }));
+
+    if (uniqueValues.length != uniqueValuesInOrder.length) {
+        console.log(`Tamanhos diferentes de UK [${uniqueValues.length}] [${uniqueValuesInOrder.length}] ${entity.className}`);
+    }
+
+    return uniqueValuesInOrder
+        .map(line => `values[${line.position + 1}]`)
+        .join(', ');
+}
+
+function generateUniqueValuesInOrderSimple(entity) {
+    // values[1], values[2], values[3], values[6]
+
+    const uniqueValues = generatePropertyInExportSimple(entity)
+        .split('\n')
+        .filter(line => line)
+        .map((line, index) => ({
+            isUk: line.includes(' //UNIQUE KEY'),
+            value: line.split(' = ')[0].trim(),
+            index
+        }))
+        .filter(line => line.isUk);
+
+    const uniqueValuesInOrder = generateGetUniqueMapSelectSimple(entity)
+        .split('\n')
+        .filter(line => line)
+        .map(line => ({
+            value: line.trim().replace(/^p\./, '').replace(/,$/, ""),
+            position: uniqueValues.find(uv => uv.value === line.trim().replace(/^p\./, '').replace(/,$/, "")).index
         }));
 
     if (uniqueValues.length != uniqueValuesInOrder.length) {
@@ -507,6 +629,14 @@ function addParameterMap(properties) {
         .replace(/,"\);$/, '");')
 }
 
+function addParameterMapSimple(properties) {
+    const counter = { value: 0 };
+    return properties.map(p => genereteAddParameterMapSimple(p, counter))
+        .filter(line => line)
+        .join("\n")
+        .replace(/,"\);$/, '");')
+}
+
 
 function countUk(entity, counter = { count: 0 }) {
 
@@ -558,6 +688,25 @@ function genereteAddParameterMap(prop, counter) {
 
     counter.value += increment;
     return returnValue;
+}
+
+function genereteAddParameterMapSimple(prop, counter) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) return;
+
+    counter.value++;
+    let value = `values[${counter.value}]`;
+
+    if (prop.referedEntity) {
+        value = `MapIdcRemoto["${prop.referedEntity.tableName}"][${value}]`;
+    }
+
+    value = prop.type.csharpType === 'byte[]' ? `Convert.FromBase64String(${value})` : value;
+
+    if (prop.isNullable) {
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", string.IsNullOrWhiteSpace(values[${counter.value}]) ? DBNull.Value : (object)${value}, DbType.${prop.type.DbType}));`;
+    } else {
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", ${value}, DbType.${prop.type.DbType}));`;
+    }
 }
 
 function genereteAddParameter(prop, counter) {
@@ -711,6 +860,10 @@ function renderGetUniqueMapSelect(prop, preffix = "", suffix = '') {
     return `\t\t\t\t\t${propName} = p${preffix}.${prop.propertyName}${(prop.suffix || '')},`;
 }
 
+function renderGetUniqueMapSelectSimple(prop) {
+    return `\t\t\t\t\tp.${prop.propertyName},`;
+}
+
 function renderGetUniqueMapStringBuilder(prop, preffix = "", suffix = '') {
 
     if (prop.referedEntity && prop.referedEntity.uniqueKey) {
@@ -724,6 +877,15 @@ function renderGetUniqueMapStringBuilder(prop, preffix = "", suffix = '') {
 
     const propName = (`${preffix}.${prop.propertyName}${(suffix || prop.suffix || '')}`).replace(/\./g, "_");
     return `\t\t\t\t\tp.${propName},`;
+}
+
+function renderGetUniqueMapStringBuilderSimple(prop) {
+
+    if (prop.referedEntity) {
+        return `\t\t\t\t\tMapIdcRemoto["${prop.referedEntity.tableName}"].ContainsKey(p.${prop.propertyName}.ToString()) ? MapIdcRemoto["${prop.referedEntity.tableName}"][p.${prop.propertyName}.ToString()] : p.${prop.propertyName},`;
+    }
+
+    return `\t\t\t\t\tp.${prop.propertyName},`;
 }
 
 function renderGetUniqueValuesInclude(prop, preffix = "") {
