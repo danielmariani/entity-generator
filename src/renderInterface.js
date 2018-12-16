@@ -233,20 +233,25 @@ ${addParameterMap(entity.Properties)}
 
         public string ImportSimple(string[] values)
         {
-            var uniqueKey = string.Join("|", new object[] { ${generateUniqueValuesInOrderSimple(entity)} })
-                .ToUpper()
-                .Trim();
+            object[] mappedValues = {
+${addMappedValues(entity.Properties)}
+            };
 
-            if (
-                (!SkipDuplicateCheck("${entity.tableName}")) &&
-                (!string.IsNullOrEmpty(uniqueKey)) &&
-                Map${entity.className}Simple.ContainsKey(uniqueKey)
-            )
+            if(!SkipDuplicateCheck("${entity.tableName}"))
             {
-                InsertIdcRemotoMap("${entity.tableName}", values[0], Map${entity.className}Simple[uniqueKey]);
-                return null;
-            }
+                var uniqueKey = string.Join("|", new object[] { ${generateUniqueValuesInOrderSimple(entity)} })
+                    .ToUpper()
+                    .Trim();
 
+                if (
+                    (!string.IsNullOrEmpty(uniqueKey)) &&
+                    Map${entity.className}Simple.ContainsKey(uniqueKey)
+                )
+                {
+                    InsertIdcRemotoMap("${entity.tableName}", values[0], Map${entity.className}Simple[uniqueKey]);
+                    return null;
+                }
+            }
 
             IProviderFactory pf = ProviderFactories.GetFactory(base.ConnectionString);
             using (IDbConnection conn = pf.CreateConnection(base.ConnectionString))
@@ -482,7 +487,7 @@ function generateUniqueValuesInOrderSimple(entity) {
     }
 
     return uniqueValuesInOrder
-        .map(line => `values[${line.position + 1}]`)
+        .map(line => `mappedValues[${line.position}]`)
         .join(', ');
 }
 
@@ -630,8 +635,16 @@ function addParameterMap(properties) {
 }
 
 function addParameterMapSimple(properties) {
-    const counter = { value: 0 };
+    const counter = { value: -1 };
     return properties.map(p => genereteAddParameterMapSimple(p, counter))
+        .filter(line => line)
+        .join("\n")
+        .replace(/,"\);$/, '");')
+}
+
+function addMappedValues(properties) {
+    const counter = { value: 0 };
+    return properties.map(p => generateMappedValues(p, counter))
         .filter(line => line)
         .join("\n")
         .replace(/,"\);$/, '");')
@@ -694,19 +707,32 @@ function genereteAddParameterMapSimple(prop, counter) {
     if (prop.isPrimaryKey && (!prop.referedEntity)) return;
 
     counter.value++;
-    let value = `values[${counter.value}]`;
+    let value = `mappedValues[${counter.value}]`;
 
-    if (prop.referedEntity) {
-        value = `MapIdcRemoto["${prop.referedEntity.tableName}"][${value}]`;
-    }
+    // if (prop.referedEntity) {
+    //     value = `DictionaryIdcRemoto.Get("${prop.referedEntity.tableName}", ${value})`;
+    // }
 
-    value = prop.type.csharpType === 'byte[]' ? `Convert.FromBase64String(${value})` : value;
+    value = prop.type.csharpType === 'byte[]' ? `Convert.FromBase64String((string)${value})` : value;
 
     if (prop.isNullable) {
-        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", string.IsNullOrWhiteSpace(values[${counter.value}]) ? DBNull.Value : (object)${value}, DbType.${prop.type.DbType}));`;
+        return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", string.IsNullOrWhiteSpace(values[${counter.value + 1}]) ? DBNull.Value : (object)${value}, DbType.${prop.type.DbType}));`;
     } else {
         return `\t\t\t\tcmd.Parameters.Add(pf.CreateParameter("@${prop.columnName}", ${value}, DbType.${prop.type.DbType}));`;
     }
+}
+
+function generateMappedValues(prop, counter) {
+    if (prop.isPrimaryKey && (!prop.referedEntity)) return;
+
+    counter.value++;
+    let value = `values[${counter.value}]`;
+
+    if (prop.referedEntity) {
+        value = `DictionaryIdcRemoto.Get("${prop.referedEntity.tableName}", ${value})`;
+    }
+
+    return `\t\t\t\t${value},`;
 }
 
 function genereteAddParameter(prop, counter) {
@@ -881,9 +907,9 @@ function renderGetUniqueMapStringBuilder(prop, preffix = "", suffix = '') {
 
 function renderGetUniqueMapStringBuilderSimple(prop) {
 
-    if (prop.referedEntity) {
-        return `\t\t\t\t\tMapIdcRemoto["${prop.referedEntity.tableName}"].ContainsKey(p.${prop.propertyName}.ToString()) ? MapIdcRemoto["${prop.referedEntity.tableName}"][p.${prop.propertyName}.ToString()] : p.${prop.propertyName},`;
-    }
+    // if (prop.referedEntity) {
+    //     return `\t\t\t\t\tDictionaryIdcRemoto.Get("${prop.referedEntity.tableName}", p.${prop.propertyName}),`;
+    // }
 
     return `\t\t\t\t\tp.${prop.propertyName},`;
 }
